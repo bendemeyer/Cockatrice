@@ -355,9 +355,8 @@ int AbstractServerSocketInterface::getDeckPathId(const QString &path)
 bool AbstractServerSocketInterface::deckListHelper(int folderId, ServerInfo_DeckStorage_Folder *folder)
 {
     QSqlQuery *query = sqlInterface->prepareQuery(
-        "select id, name from {prefix}_decklist_folders where id_parent = :id_parent and id_user = :id_user");
+        "select id, name from {prefix}_decklist_folders where id_parent = :id_parent");
     query->bindValue(":id_parent", folderId);
-    query->bindValue(":id_user", userInfo->id());
     if (!sqlInterface->execSqlQuery(query))
         return false;
 
@@ -375,9 +374,8 @@ bool AbstractServerSocketInterface::deckListHelper(int folderId, ServerInfo_Deck
     }
 
     query = sqlInterface->prepareQuery("select id, name, upload_time from {prefix}_decklist_files where id_folder = "
-                                       ":id_folder and id_user = :id_user");
+                                       ":id_folder");
     query->bindValue(":id_folder", folderId);
-    query->bindValue(":id_user", userInfo->id());
     if (!sqlInterface->execSqlQuery(query))
         return false;
 

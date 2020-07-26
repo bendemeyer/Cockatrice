@@ -891,9 +891,8 @@ DeckList *Servatrice_DatabaseInterface::getDeckFromDatabase(int deckId, int user
     checkSql();
 
     QSqlQuery *query =
-        prepareQuery("select content from {prefix}_decklist_files where id = :id and id_user = :id_user");
+        prepareQuery("select content from {prefix}_decklist_files where id = :id");
     query->bindValue(":id", deckId);
-    query->bindValue(":id_user", userId);
     execSqlQuery(query);
     if (!query->next())
         throw Response::RespNameNotFound;
