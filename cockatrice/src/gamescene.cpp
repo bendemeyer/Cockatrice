@@ -20,7 +20,7 @@ GameScene::GameScene(PhasesToolbar *_phasesToolbar, QObject *parent)
 {
     animationTimer = new QBasicTimer;
     addItem(phasesToolbar);
-    connect(settingsCache, SIGNAL(minPlayersForMultiColumnLayoutChanged()), this, SLOT(rearrange()));
+    connect(&SettingsCache::instance(), SIGNAL(minPlayersForMultiColumnLayoutChanged()), this, SLOT(rearrange()));
 
     rearrange();
 }
@@ -96,7 +96,7 @@ void GameScene::rearrange()
     }
 
     const int playersCount = playersPlaying.size();
-    const int columns = playersCount < settingsCache->getMinPlayersForMultiColumnLayout() ? 1 : 2;
+    const int columns = playersCount < SettingsCache::instance().getMinPlayersForMultiColumnLayout() ? 1 : 2;
     const int rows = ceil((qreal)playersCount / columns);
     qreal sceneHeight = 0, sceneWidth = -playerAreaSpacing;
     QList<int> columnWidth;
@@ -144,12 +144,10 @@ void GameScene::rearrange()
 
 void GameScene::toggleZoneView(Player *player, const QString &zoneName, int numberCards)
 {
-    for (int i = 0; i < zoneViews.size(); i++) {
-        ZoneViewZone *temp = zoneViews[i]->getZone();
-        if ((temp->getName() == zoneName) && (temp->getPlayer() == player)) { // view is already open
-            zoneViews[i]->close();
-            if (temp->getNumberCards() == numberCards)
-                return;
+    for (auto &view : zoneViews) {
+        ZoneViewZone *temp = view->getZone();
+        if (temp->getName() == zoneName && temp->getPlayer() == player && temp->getNumberCards() == numberCards) {
+            view->close();
         }
     }
 
@@ -157,12 +155,13 @@ void GameScene::toggleZoneView(Player *player, const QString &zoneName, int numb
     zoneViews.append(item);
     connect(item, SIGNAL(closePressed(ZoneViewWidget *)), this, SLOT(removeZoneView(ZoneViewWidget *)));
     addItem(item);
-    if (zoneName == "grave")
+    if (zoneName == "grave") {
         item->setPos(360, 100);
-    else if (zoneName == "rfg")
+    } else if (zoneName == "rfg") {
         item->setPos(380, 120);
-    else
+    } else {
         item->setPos(340, 80);
+    }
 }
 
 void GameScene::addRevealedZoneView(Player *player,

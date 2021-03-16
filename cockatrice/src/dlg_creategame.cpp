@@ -49,7 +49,7 @@ void DlgCreateGame::sharedCtor()
         QRadioButton *gameTypeRadioButton = new QRadioButton(gameTypeIterator.value(), this);
         gameTypeLayout->addWidget(gameTypeRadioButton);
         gameTypeCheckBoxes.insert(gameTypeIterator.key(), gameTypeRadioButton);
-        bool isChecked = settingsCache->getGameTypes().contains(gameTypeIterator.value() + ", ");
+        bool isChecked = SettingsCache::instance().getGameTypes().contains(gameTypeIterator.value() + ", ");
         gameTypeCheckBoxes[gameTypeIterator.key()]->setChecked(isChecked);
     }
     QGroupBox *gameTypeGroupBox = new QGroupBox(tr("Game type"));
@@ -83,11 +83,13 @@ void DlgCreateGame::sharedCtor()
     spectatorsNeedPasswordCheckBox = new QCheckBox(tr("Spectators &need a password to watch"));
     spectatorsCanTalkCheckBox = new QCheckBox(tr("Spectators can &chat"));
     spectatorsSeeEverythingCheckBox = new QCheckBox(tr("Spectators can see &hands"));
+    createGameAsSpectatorCheckBox = new QCheckBox(tr("Create game as spectator"));
     QVBoxLayout *spectatorsLayout = new QVBoxLayout;
     spectatorsLayout->addWidget(spectatorsAllowedCheckBox);
     spectatorsLayout->addWidget(spectatorsNeedPasswordCheckBox);
     spectatorsLayout->addWidget(spectatorsCanTalkCheckBox);
     spectatorsLayout->addWidget(spectatorsSeeEverythingCheckBox);
+    spectatorsLayout->addWidget(createGameAsSpectatorCheckBox);
     spectatorsGroupBox = new QGroupBox(tr("Spectators"));
     spectatorsGroupBox->setLayout(spectatorsLayout);
 
@@ -95,7 +97,7 @@ void DlgCreateGame::sharedCtor()
     grid->addWidget(generalGroupBox, 0, 0);
     grid->addWidget(joinRestrictionsGroupBox, 0, 1);
     grid->addWidget(gameTypeGroupBox, 1, 0);
-    grid->addWidget(spectatorsGroupBox, 1, 1);
+    grid->addWidget(spectatorsGroupBox, 1, 1, Qt::AlignTop);
     grid->addWidget(rememberGameSettings, 2, 0);
 
     buttonBox = new QDialogButtonBox(QDialogButtonBox::Ok);
@@ -115,20 +117,21 @@ DlgCreateGame::DlgCreateGame(TabRoom *_room, const QMap<int, QString> &_gameType
 {
     sharedCtor();
 
-    rememberGameSettings->setChecked(settingsCache->getRememberGameSettings());
-    descriptionEdit->setText(settingsCache->getGameDescription());
-    maxPlayersEdit->setValue(settingsCache->getMaxPlayers());
+    rememberGameSettings->setChecked(SettingsCache::instance().getRememberGameSettings());
+    descriptionEdit->setText(SettingsCache::instance().getGameDescription());
+    maxPlayersEdit->setValue(SettingsCache::instance().getMaxPlayers());
     if (room && room->getUserInfo()->user_level() & ServerInfo_User::IsRegistered) {
-        onlyBuddiesCheckBox->setChecked(settingsCache->getOnlyBuddies());
-        onlyRegisteredCheckBox->setChecked(settingsCache->getOnlyRegistered());
+        onlyBuddiesCheckBox->setChecked(SettingsCache::instance().getOnlyBuddies());
+        onlyRegisteredCheckBox->setChecked(SettingsCache::instance().getOnlyRegistered());
     } else {
         onlyBuddiesCheckBox->setEnabled(false);
         onlyRegisteredCheckBox->setEnabled(false);
     }
-    spectatorsAllowedCheckBox->setChecked(settingsCache->getSpectatorsAllowed());
-    spectatorsNeedPasswordCheckBox->setChecked(settingsCache->getSpectatorsNeedPassword());
-    spectatorsCanTalkCheckBox->setChecked(settingsCache->getSpectatorsCanTalk());
-    spectatorsSeeEverythingCheckBox->setChecked(settingsCache->getSpectatorsCanSeeEverything());
+    spectatorsAllowedCheckBox->setChecked(SettingsCache::instance().getSpectatorsAllowed());
+    spectatorsNeedPasswordCheckBox->setChecked(SettingsCache::instance().getSpectatorsNeedPassword());
+    spectatorsCanTalkCheckBox->setChecked(SettingsCache::instance().getSpectatorsCanTalk());
+    spectatorsSeeEverythingCheckBox->setChecked(SettingsCache::instance().getSpectatorsCanSeeEverything());
+    createGameAsSpectatorCheckBox->setChecked(SettingsCache::instance().getCreateGameAsSpectator());
 
     if (!rememberGameSettings->isChecked()) {
         actReset();
@@ -159,6 +162,7 @@ DlgCreateGame::DlgCreateGame(const ServerInfo_Game &gameInfo, const QMap<int, QS
     spectatorsNeedPasswordCheckBox->setEnabled(false);
     spectatorsCanTalkCheckBox->setEnabled(false);
     spectatorsSeeEverythingCheckBox->setEnabled(false);
+    createGameAsSpectatorCheckBox->setEnabled(false);
 
     descriptionEdit->setText(QString::fromStdString(gameInfo.description()));
     maxPlayersEdit->setValue(gameInfo.max_players());
@@ -200,6 +204,7 @@ void DlgCreateGame::actReset()
     spectatorsNeedPasswordCheckBox->setChecked(false);
     spectatorsCanTalkCheckBox->setChecked(false);
     spectatorsSeeEverythingCheckBox->setChecked(false);
+    createGameAsSpectatorCheckBox->setChecked(false);
 
     QMapIterator<int, QRadioButton *> gameTypeCheckBoxIterator(gameTypeCheckBoxes);
     while (gameTypeCheckBoxIterator.hasNext()) {
@@ -226,6 +231,7 @@ void DlgCreateGame::actOK()
     cmd.set_spectators_can_talk(spectatorsCanTalkCheckBox->isChecked());
     cmd.set_spectators_see_everything(spectatorsSeeEverythingCheckBox->isChecked());
     cmd.set_join_as_judge(QApplication::keyboardModifiers() & Qt::ShiftModifier);
+    cmd.set_join_as_spectator(createGameAsSpectatorCheckBox->isChecked());
 
     QString gameTypes = QString();
     QMapIterator<int, QRadioButton *> gameTypeCheckBoxIterator(gameTypeCheckBoxes);
@@ -237,17 +243,18 @@ void DlgCreateGame::actOK()
         }
     }
 
-    settingsCache->setRememberGameSettings(rememberGameSettings->isChecked());
+    SettingsCache::instance().setRememberGameSettings(rememberGameSettings->isChecked());
     if (rememberGameSettings->isChecked()) {
-        settingsCache->setGameDescription(descriptionEdit->text());
-        settingsCache->setMaxPlayers(maxPlayersEdit->value());
-        settingsCache->setOnlyBuddies(onlyBuddiesCheckBox->isChecked());
-        settingsCache->setOnlyRegistered(onlyRegisteredCheckBox->isChecked());
-        settingsCache->setSpectatorsAllowed(spectatorsAllowedCheckBox->isChecked());
-        settingsCache->setSpectatorsNeedPassword(spectatorsNeedPasswordCheckBox->isChecked());
-        settingsCache->setSpectatorsCanTalk(spectatorsCanTalkCheckBox->isChecked());
-        settingsCache->setSpectatorsCanSeeEverything(spectatorsSeeEverythingCheckBox->isChecked());
-        settingsCache->setGameTypes(gameTypes);
+        SettingsCache::instance().setGameDescription(descriptionEdit->text());
+        SettingsCache::instance().setMaxPlayers(maxPlayersEdit->value());
+        SettingsCache::instance().setOnlyBuddies(onlyBuddiesCheckBox->isChecked());
+        SettingsCache::instance().setOnlyRegistered(onlyRegisteredCheckBox->isChecked());
+        SettingsCache::instance().setSpectatorsAllowed(spectatorsAllowedCheckBox->isChecked());
+        SettingsCache::instance().setSpectatorsNeedPassword(spectatorsNeedPasswordCheckBox->isChecked());
+        SettingsCache::instance().setSpectatorsCanTalk(spectatorsCanTalkCheckBox->isChecked());
+        SettingsCache::instance().setSpectatorsCanSeeEverything(spectatorsSeeEverythingCheckBox->isChecked());
+        SettingsCache::instance().setCreateGameAsSpectator(createGameAsSpectatorCheckBox->isChecked());
+        SettingsCache::instance().setGameTypes(gameTypes);
     }
     PendingCommand *pend = room->prepareRoomCommand(cmd);
     connect(pend, SIGNAL(finished(Response, CommandContainer, QVariant)), this, SLOT(checkResponse(Response)));

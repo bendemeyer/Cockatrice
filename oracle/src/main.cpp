@@ -12,7 +12,6 @@
 #include <QTranslator>
 
 QTranslator *translator, *qtTranslator;
-SettingsCache *settingsCache;
 ThemeManager *themeManager;
 
 const QString translationPrefix = "oracle";
@@ -21,7 +20,7 @@ bool isSpoilersOnly;
 
 void installNewTranslator()
 {
-    QString lang = settingsCache->getLang();
+    QString lang = SettingsCache::instance().getLang();
 
     qtTranslator->load("qt_" + lang, QLibraryInfo::location(QLibraryInfo::TranslationsPath));
     qApp->installTranslator(qtTranslator);
@@ -53,7 +52,6 @@ int main(int argc, char *argv[])
     translationPath = qApp->applicationDirPath() + "/../share/oracle/translations";
 #endif
 
-    settingsCache = new SettingsCache;
     themeManager = new ThemeManager;
 
     qtTranslator = new QTranslator;
@@ -64,6 +62,10 @@ int main(int argc, char *argv[])
 
     QIcon icon("theme:appicon.svg");
     wizard.setWindowIcon(icon);
+#if QT_VERSION >= QT_VERSION_CHECK(5, 7, 0)
+    // set name of the app desktop file; used by wayland to load the window icon
+    QGuiApplication::setDesktopFileName("oracle");
+#endif
 
     wizard.show();
 
