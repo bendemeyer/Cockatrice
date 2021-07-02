@@ -60,11 +60,6 @@ void SettingsCache::translateLegacySettings()
     legacySetting.beginGroup("server");
     servers().setPreviousHostLogin(legacySetting.value("previoushostlogin").toInt());
     servers().setPreviousHostList(legacySetting.value("previoushosts").toStringList());
-    servers().setHostName(legacySetting.value("hostname").toString());
-    servers().setPort(legacySetting.value("port").toString());
-    servers().setPlayerName(legacySetting.value("playername").toString());
-    servers().setPassword(legacySetting.value("password").toString());
-    servers().setSavePassword(legacySetting.value("save_password").toInt());
     servers().setAutoConnect(legacySetting.value("auto_connect").toInt());
     servers().setFPHostName(legacySetting.value("fphostname").toString());
     servers().setFPPort(legacySetting.value("fpport").toString());
@@ -197,6 +192,7 @@ SettingsCache::SettingsCache()
 
     deckPath = getSafeConfigPath("paths/decks", dataPath + "/decks/");
     replaysPath = getSafeConfigPath("paths/replays", dataPath + "/replays/");
+    themesPath = getSafeConfigPath("paths/themes", dataPath + "/themes/");
     picsPath = getSafeConfigPath("paths/pics", dataPath + "/pics/");
     // this has never been exposed as an user-configurable setting
     if (picsPath.endsWith("/")) {
@@ -386,6 +382,13 @@ void SettingsCache::setReplaysPath(const QString &_replaysPath)
 {
     replaysPath = _replaysPath;
     settings->setValue("paths/replays", replaysPath);
+}
+
+void SettingsCache::setThemesPath(const QString &_themesPath)
+{
+    themesPath = _themesPath;
+    settings->setValue("paths/themes", themesPath);
+    emit themeChanged();
 }
 
 void SettingsCache::setCustomCardDatabasePath(const QString &_customCardDatabasePath)

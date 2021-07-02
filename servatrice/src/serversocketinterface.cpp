@@ -103,7 +103,7 @@ bool AbstractServerSocketInterface::initSession()
         return true;
 
     int maxUsers = servatrice->getMaxUsersPerAddress();
-    if ((maxUsers > 0) && (servatrice->getUsersWithAddress(getPeerAddress()) >= maxUsers)) {
+    if ((maxUsers > 0) && (servatrice->getUsersWithAddress(getPeerAddress()) > maxUsers)) {
         Event_ConnectionClosed event;
         event.set_reason(Event_ConnectionClosed::TOO_MANY_CONNECTIONS);
         SessionEvent *se = prepareSessionEvent(event);
@@ -1097,9 +1097,8 @@ Response::ResponseCode AbstractServerSocketInterface::cmdRegisterAccount(const C
         return Response::RespPasswordTooShort;
     }
 
-    QString token;
     bool requireEmailActivation = settingsCache->value("registration/requireemailactivation", true).toBool();
-    bool regSucceeded = sqlInterface->registerUser(userName, realName, gender, password, emailAddress, country, token,
+    bool regSucceeded = sqlInterface->registerUser(userName, realName, gender, password, emailAddress, country,
                                                    !requireEmailActivation);
 
     if (regSucceeded) {
@@ -1247,7 +1246,7 @@ Response::ResponseCode AbstractServerSocketInterface::cmdAccountPassword(const C
 Response::ResponseCode AbstractServerSocketInterface::cmdForgotPasswordRequest(const Command_ForgotPasswordRequest &cmd,
                                                                                ResponseContainer &rc)
 {
-    qDebug() << "Received forgot password request from user: " << QString::fromStdString(cmd.user_name());
+    qDebug() << "Received reset password request from user: " << QString::fromStdString(cmd.user_name());
 
     if (!servatrice->getEnableForgotPassword()) {
         if (servatrice->getEnableForgotPasswordAudit())
@@ -1325,7 +1324,7 @@ Response::ResponseCode AbstractServerSocketInterface::cmdForgotPasswordReset(con
                                                                              ResponseContainer &rc)
 {
     Q_UNUSED(rc);
-    qDebug() << "Received forgot password reset from user: " << QString::fromStdString(cmd.user_name());
+    qDebug() << "Received reset password reset from user: " << QString::fromStdString(cmd.user_name());
 
     if (!sqlInterface->doesForgotPasswordExist(QString::fromStdString(cmd.user_name()))) {
         if (servatrice->getEnableForgotPasswordAudit())
@@ -1365,7 +1364,7 @@ AbstractServerSocketInterface::cmdForgotPasswordChallenge(const Command_ForgotPa
                                                           ResponseContainer &rc)
 {
     Q_UNUSED(rc);
-    qDebug() << "Received forgot password challenge from user: " << QString::fromStdString(cmd.user_name());
+    qDebug() << "Received reset password challenge from user: " << QString::fromStdString(cmd.user_name());
 
     if (sqlInterface->doesForgotPasswordExist(QString::fromStdString(cmd.user_name()))) {
         if (servatrice->getEnableForgotPasswordAudit())
@@ -1690,6 +1689,9 @@ WebsocketServerSocketInterface::~WebsocketServerSocketInterface()
 
 void WebsocketServerSocketInterface::initConnection(void *_socket)
 {
+    if (_socket == nullptr) {
+        return;
+    }
     socket = (QWebSocket *)_socket;
     socket->setParent(this);
     address = socket->peerAddress();
