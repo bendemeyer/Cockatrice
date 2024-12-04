@@ -1,7 +1,25 @@
-import React from "react";
-import ReactDOM from "react-dom";
-import "./index.css";
+import { StrictMode } from 'react';
+import { createRoot } from 'react-dom/client';
+import { Theme, StyledEngineProvider } from '@mui/material';
+import { ThemeProvider } from '@mui/material/styles';
 
-import { AppShell } from "containers";
+import { AppShell } from './containers';
+import { materialTheme } from './material-theme';
 
-ReactDOM.render(<AppShell />, document.getElementById("root"));
+import './i18n';
+import './index.css';
+
+const AppWithMaterialTheme = () => (
+  <StrictMode>
+    <StyledEngineProvider injectFirst>
+      <ThemeProvider theme={materialTheme}>
+        <AppShell />
+      </ThemeProvider>
+    </StyledEngineProvider>
+  </StrictMode>
+);
+
+const container = document.getElementById('root');
+const root = createRoot(container!);
+
+root.render(<AppWithMaterialTheme />);

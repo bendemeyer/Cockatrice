@@ -1,16 +1,17 @@
 // eslint-disable-next-line
 import React, { Component } from "react";
-import { connect } from "react-redux";
-import { NavLink, generatePath } from "react-router-dom";
+import { connect } from 'react-redux';
+import { NavLink, generatePath } from 'react-router-dom';
 
-import Menu from "@material-ui/core/Menu";
-import MenuItem from "@material-ui/core/MenuItem";
+import Menu from '@mui/material/Menu';
+import MenuItem from '@mui/material/MenuItem';
 
-import { SessionService } from "api";
-import { ServerSelectors } from "store";
-import { RouteEnum, User } from "types";
+import { Images } from 'images/Images';
+import { SessionService } from 'api';
+import { ServerSelectors } from 'store';
+import { RouteEnum, User } from 'types';
 
-import "./UserDisplay.css";
+import './UserDisplay.css';
 
 
 class UserDisplay extends Component<UserDisplayProps, UserDisplayState> {
@@ -85,7 +86,7 @@ class UserDisplay extends Component<UserDisplayProps, UserDisplayState> {
   render() {
     const { user } = this.props;
     const { position } = this.state;
-    const { name } = user;
+    const { name, country } = user;
 
     const isABuddy = this.isABuddy();
     const isIgnored = this.isIgnored();
@@ -96,7 +97,7 @@ class UserDisplay extends Component<UserDisplayProps, UserDisplayState> {
       <div className="user-display">
         <NavLink to={generatePath(RouteEnum.PLAYER, { name })} className="plain-link">
           <div className="user-display__details" onContextMenu={this.handleClick}>
-            <div className="user-display__country"></div>
+            <img className="user-display__country" src={Images.Countries[country]} alt={country}></img>
             <div className="user-display__name single-line-ellipsis">{name}</div>
           </div>
         </NavLink>
@@ -116,13 +117,13 @@ class UserDisplay extends Component<UserDisplayProps, UserDisplayState> {
             </NavLink>
             {
               !isABuddy
-                ? ( <MenuItem dense onClick={this.addToBuddyList}>Add to Buddy List</MenuItem> )
-                : ( <MenuItem dense onClick={this.removeFromBuddyList}>Remove From Buddy List</MenuItem> )
+                ? (<MenuItem dense onClick={this.addToBuddyList}>Add to Buddy List</MenuItem>)
+                : (<MenuItem dense onClick={this.removeFromBuddyList}>Remove From Buddy List</MenuItem>)
             }
             {
               !isIgnored
-                ? ( <MenuItem dense onClick={this.addToIgnoreList}>Add to Ignore List</MenuItem> )
-                : ( <MenuItem dense onClick={this.removeFromIgnoreList}>Remove From Ignore List</MenuItem> )
+                ? (<MenuItem dense onClick={this.addToIgnoreList}>Add to Ignore List</MenuItem>)
+                : (<MenuItem dense onClick={this.removeFromIgnoreList}>Remove From Ignore List</MenuItem>)
             }
           </Menu>
         </div>

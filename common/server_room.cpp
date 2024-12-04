@@ -4,12 +4,14 @@
 #include "pb/event_join_room.pb.h"
 #include "pb/event_leave_room.pb.h"
 #include "pb/event_list_games.pb.h"
+#include "pb/event_remove_messages.pb.h"
 #include "pb/event_room_say.pb.h"
 #include "pb/room_commands.pb.h"
 #include "pb/serverinfo_chat_message.pb.h"
 #include "pb/serverinfo_room.pb.h"
 #include "server_game.h"
 #include "server_protocolhandler.h"
+#include "trice_limits.h"
 
 #include <QDateTime>
 #include <QDebug>
@@ -198,20 +200,20 @@ void Server_Room::addExternalUser(const ServerInfo_User &userInfo)
     emit roomInfoChanged(roomInfo);
 }
 
-void Server_Room::removeExternalUser(const QString &name)
+void Server_Room::removeExternalUser(const QString &_name)
 {
     // This function is always called from the Server thread with server->roomsMutex locked.
     ServerInfo_Room roomInfo;
     roomInfo.set_room_id(id);
 
     usersLock.lockForWrite();
-    if (externalUsers.contains(name))
-        externalUsers.remove(name);
+    if (externalUsers.contains(_name))
+        externalUsers.remove(_name);
     roomInfo.set_player_count(users.size() + externalUsers.size());
     usersLock.unlock();
 
     Event_LeaveRoom event;
-    event.set_name(name.toStdString());
+    event.set_name(_name.toStdString());
     sendRoomEvent(prepareRoomEvent(event), false);
 
     emit roomInfoChanged(roomInfo);
@@ -239,6 +241,8 @@ Response::ResponseCode Server_Room::processJoinGameCommand(const Command_JoinGam
                                                            ResponseContainer &rc,
                                                            Server_AbstractUserInterface *userInterface)
 {
+    if (cmd.password().length() > MAX_NAME_LENGTH)
+        return Response::RespWrongPassword;
     // This function is called from the Server thread and from the S_PH thread.
     // server->roomsMutex is always locked.
 
@@ -272,11 +276,11 @@ Response::ResponseCode Server_Room::processJoinGameCommand(const Command_JoinGam
     return result;
 }
 
-void Server_Room::say(const QString &userName, const QString &s, bool sendToIsl)
+void Server_Room::say(const QString &userName, const QString &userMessage, bool sendToIsl)
 {
     Event_RoomSay event;
     event.set_name(userName.toStdString());
-    event.set_message(s.toStdString());
+    event.set_message(userMessage.toStdString());
     sendRoomEvent(prepareRoomEvent(event), sendToIsl);
 
     if (chatHistorySize != 0) {
@@ -285,13 +289,36 @@ void Server_Room::say(const QString &userName, const QString &s, bool sendToIsl)
         QString dateTimeString = dateTime.toString();
         chatMessage.set_time(dateTimeString.toStdString());
         chatMessage.set_sender_name(userName.toStdString());
-        chatMessage.set_message(s.simplified().toStdString());
+        chatMessage.set_message(userMessage.simplified().toStdString());
 
         historyLock.lockForWrite();
-        if (chatHistory.size() >= chatHistorySize)
+        if (chatHistory.size() >= chatHistorySize) {
             chatHistory.removeAt(0);
+        }
 
-        chatHistory << chatMessage;
+        chatHistory.push_back(std::move(chatMessage));
+        historyLock.unlock();
+    }
+}
+
+void Server_Room::removeSaidMessages(const QString &userName, int amount, bool sendToIsl)
+{
+    Event_RemoveMessages event;
+    auto stdStringUserName = userName.toStdString();
+    event.set_name(stdStringUserName);
+    event.set_amount(amount);
+    sendRoomEvent(prepareRoomEvent(event), sendToIsl);
+
+    if (chatHistorySize != 0) {
+        int removed = 0;
+        historyLock.lockForWrite();
+        // redact [amount] of the most recent messages from this user from history
+        for (auto message = chatHistory.rbegin(); message != chatHistory.rend() && removed != amount; ++message) {
+            if (message->sender_name() == stdStringUserName) {
+                message->clear_message();
+                ++removed;
+            }
+        }
         historyLock.unlock();
     }
 }

@@ -2,284 +2,397 @@
 #
 # provides the cockatrice binary
 
-PROJECT(Cockatrice VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
+project(Cockatrice VERSION "${PROJECT_VERSION_MAJOR}.${PROJECT_VERSION_MINOR}.${PROJECT_VERSION_PATCH}")
 
-SET(cockatrice_SOURCES
-    src/abstractcounter.cpp
-    src/counter_general.cpp
-    src/dlg_creategame.cpp
-    src/dlg_filter_games.cpp
-    src/dlg_connect.cpp
-    src/dlg_create_token.cpp
-    src/dlg_edit_avatar.cpp
-    src/dlg_edit_password.cpp
-    src/dlg_edit_tokens.cpp
-    src/dlg_edit_user.cpp
-    src/dlg_forgotpasswordrequest.cpp
-    src/dlg_forgotpasswordreset.cpp
-    src/dlg_forgotpasswordchallenge.cpp
-    src/dlg_manage_sets.cpp
-    src/dlg_register.cpp
-    src/dlg_tip_of_the_day.cpp
-    src/tip_of_the_day.cpp
-    src/dlg_update.cpp
-    src/dlg_viewlog.cpp
-    src/abstractclient.cpp
-    src/remoteclient.cpp
+set(cockatrice_SOURCES
+    src/game/cards/abstract_card_drag_item.cpp
+    src/game/cards/abstract_card_item.cpp
+    src/client/game_logic/abstract_client.cpp
+    src/game/board/abstract_counter.cpp
+    src/game/board/abstract_graphics_item.cpp
+    src/game/board/arrow_item.cpp
+    src/game/board/arrow_target.cpp
+    src/game/cards/card_database.cpp
+    src/game/cards/card_database_manager.cpp
+    src/game/cards/card_database_model.cpp
+    src/game/cards/card_database_parser/card_database_parser.cpp
+    src/game/cards/card_database_parser/cockatrice_xml_3.cpp
+    src/game/cards/card_database_parser/cockatrice_xml_4.cpp
+    src/game/cards/card_drag_item.cpp
+    src/game/filters/filter_card.cpp
+    src/client/ui/widgets/cards/card_info_frame_widget.cpp
+    src/client/ui/widgets/cards/card_info_picture_widget.cpp
+    src/client/ui/widgets/cards/card_info_text_widget.cpp
+    src/client/ui/widgets/cards/card_info_display_widget.cpp
+    src/game/cards/card_item.cpp
+    src/game/cards/card_list.cpp
+    src/game/zones/card_zone.cpp
+    src/server/chat_view/chat_view.cpp
+    src/game/board/counter_general.cpp
+    src/deck/custom_line_edit.cpp
+    src/deck/deck_loader.cpp
+    src/deck/deck_list_model.cpp
+    src/deck/deck_stats_interface.cpp
+    src/deck/deck_view.cpp
+    src/dialogs/dlg_connect.cpp
+    src/dialogs/dlg_create_token.cpp
+    src/dialogs/dlg_create_game.cpp
+    src/dialogs/dlg_edit_avatar.cpp
+    src/dialogs/dlg_edit_password.cpp
+    src/dialogs/dlg_edit_tokens.cpp
+    src/dialogs/dlg_edit_user.cpp
+    src/dialogs/dlg_filter_games.cpp
+    src/dialogs/dlg_forgot_password_challenge.cpp
+    src/dialogs/dlg_forgot_password_request.cpp
+    src/dialogs/dlg_forgot_password_reset.cpp
+    src/dialogs/dlg_load_deck_from_clipboard.cpp
+    src/dialogs/dlg_load_remote_deck.cpp
+    src/dialogs/dlg_manage_sets.cpp
+    src/dialogs/dlg_register.cpp
+    src/dialogs/dlg_roll_dice.cpp
+    src/dialogs/dlg_settings.cpp
+    src/dialogs/dlg_tip_of_the_day.cpp
+    src/dialogs/dlg_update.cpp
+    src/dialogs/dlg_view_log.cpp
+    src/game/filters/filter_string.cpp
+    src/game/filters/filter_builder.cpp
+    src/game/filters/filter_tree.cpp
+    src/game/filters/filter_tree_model.cpp
+    src/client/ui/layouts/flow_layout.cpp
+    src/client/ui/layouts/horizontal_flow_layout.cpp
+    src/client/ui/layouts/vertical_flow_layout.cpp
+    src/client/ui/widgets/general/layout_containers/flow_widget.cpp
+    src/game/game_scene.cpp
+    src/game/game_selector.cpp
+    src/game/games_model.cpp
+    src/game/game_view.cpp
+    src/client/get_text_with_max.cpp
+    src/game/hand_counter.cpp
+    src/server/handle_public_servers.cpp
+    src/game/zones/hand_zone.cpp
+    src/client/game_logic/key_signals.cpp
+    src/client/ui/line_edit_completer.cpp
+    src/server/local_client.cpp
+    src/server/local_server.cpp
+    src/server/local_server_interface.cpp
+    src/utility/logger.cpp
+    src/client/ui/widgets/cards/card_info_picture_enlarged_widget.cpp
+    src/client/ui/widgets/cards/card_info_picture_with_text_overlay_widget.cpp
+    src/client/ui/widgets/general/display/labeled_input.cpp
     src/main.cpp
-    src/window_main.cpp
-    src/gamesmodel.cpp
-    src/player.cpp
-    src/playertarget.cpp
-    src/cardzone.cpp
-    src/selectzone.cpp
-    src/cardlist.cpp
-    src/abstractcarditem.cpp
-    src/carditem.cpp
-    src/tablezone.cpp
-    src/handzone.cpp
-    src/handcounter.cpp
-    src/carddatabase.cpp
-    src/keysignals.cpp
-    src/gameview.cpp
-    src/gameselector.cpp
-    src/decklistmodel.cpp
-    src/deck_loader.cpp
-    src/dlg_load_deck_from_clipboard.cpp
-    src/dlg_load_remote_deck.cpp
-    src/cardinfowidget.cpp
-    src/cardframe.cpp
-    src/cardinfopicture.cpp
-    src/cardinfotext.cpp
-    src/filterbuilder.cpp
-    src/cardfilter.cpp
-    src/filtertreemodel.cpp
-    src/filtertree.cpp
-    src/messagelogwidget.cpp
-    src/zoneviewzone.cpp
-    src/zoneviewwidget.cpp
-    src/pilezone.cpp
-    src/stackzone.cpp
-    src/carddragitem.cpp
-    src/carddatabasemodel.cpp
-    src/setsmodel.cpp
-    src/abstractgraphicsitem.cpp
-    src/abstractcarddragitem.cpp
-    src/dlg_settings.cpp
-    src/phasestoolbar.cpp
-    src/gamescene.cpp
-    src/arrowitem.cpp
-    src/arrowtarget.cpp
-    src/tab.cpp
-    src/tab_server.cpp
-    src/tab_room.cpp
-    src/tab_message.cpp
-    src/tab_game.cpp
-    src/tab_deck_storage.cpp
-    src/tab_replays.cpp
-    src/tab_supervisor.cpp
-    src/tab_admin.cpp
-    src/tab_account.cpp
-    src/tab_deck_editor.cpp
-    src/tab_logs.cpp
-    src/replay_timeline_widget.cpp
-    src/deckstats_interface.cpp
-    src/tappedout_interface.cpp
-    src/chatview/chatview.cpp
-    src/userlist.cpp
-    src/userinfobox.cpp
-    src/user_context_menu.cpp
-    src/remotedecklist_treewidget.cpp
-    src/remotereplaylist_treewidget.cpp
-    src/deckview.cpp
-    src/playerlistwidget.cpp
-    src/pixmapgenerator.cpp
-    src/settingscache.cpp
-    src/thememanager.cpp
-    src/localserver.cpp
-    src/localserverinterface.cpp
-    src/localclient.cpp
-    src/soundengine.cpp
-    src/pending_command.cpp
-    src/pictureloader.cpp
-    src/shortcutssettings.cpp
-    src/sequenceEdit/sequenceedit.cpp
-    src/lineeditcompleter.cpp
-    src/settings/settingsmanager.cpp
-    src/settings/carddatabasesettings.cpp
-    src/settings/serverssettings.cpp
-    src/settings/messagesettings.cpp
-    src/settings/gamefilterssettings.cpp
-    src/settings/layoutssettings.cpp
-    src/settings/downloadsettings.cpp
-    src/update_downloader.cpp
-    src/logger.cpp
-    src/releasechannel.cpp
-    src/userconnection_information.cpp
-    src/spoilerbackgroundupdater.cpp
-    src/handle_public_servers.cpp
-    src/carddbparser/carddatabaseparser.cpp
-    src/carddbparser/cockatricexml3.cpp
-    src/carddbparser/cockatricexml4.cpp
-    src/filter_string.cpp
-    src/phase.cpp
-    src/customlineedit.cpp
-    src/translatecountername.cpp
+    src/server/message_log_widget.cpp
+    src/client/ui/layouts/overlap_layout.cpp
+    src/client/ui/widgets/general/layout_containers/overlap_widget.cpp
+    src/client/ui/widgets/general/layout_containers/overlap_control_widget.cpp
+    src/server/pending_command.cpp
+    src/game/phase.cpp
+    src/client/ui/phases_toolbar.cpp
+    src/client/ui/picture_loader.cpp
+    src/game/zones/pile_zone.cpp
+    src/client/ui/pixel_map_generator.cpp
+    src/game/player/player.cpp
+    src/game/player/player_list_widget.cpp
+    src/game/player/player_target.cpp
+    src/client/network/release_channel.cpp
+    src/server/remote/remote_client.cpp
+    src/server/remote/remote_decklist_tree_widget.cpp
+    src/server/remote/remote_replay_list_tree_widget.cpp
+    src/client/network/replay_timeline_widget.cpp
+    src/game/zones/select_zone.cpp
+    src/utility/sequence_edit.cpp
+    src/client/network/sets_model.cpp
+    src/settings/card_database_settings.cpp
+    src/settings/download_settings.cpp
+    src/settings/game_filters_settings.cpp
+    src/settings/layouts_settings.cpp
+    src/settings/message_settings.cpp
+    src/settings/servers_settings.cpp
+    src/settings/settings_manager.cpp
+    src/settings/cache_settings.cpp
+    src/settings/shortcuts_settings.cpp
+    src/client/sound_engine.cpp
+    src/client/network/spoiler_background_updater.cpp
+    src/game/zones/stack_zone.cpp
+    src/client/tabs/tab.cpp
+    src/client/tabs/tab_account.cpp
+    src/client/tabs/tab_admin.cpp
+    src/client/tabs/tab_deck_editor.cpp
+    src/client/tabs/tab_deck_storage.cpp
+    src/client/tabs/tab_game.cpp
+    src/client/tabs/tab_logs.cpp
+    src/client/tabs/tab_message.cpp
+    src/client/tabs/tab_replays.cpp
+    src/client/tabs/tab_room.cpp
+    src/client/tabs/tab_server.cpp
+    src/client/tabs/tab_supervisor.cpp
+    src/game/zones/table_zone.cpp
+    src/client/tapped_out_interface.cpp
+    src/client/ui/theme_manager.cpp
+    src/client/ui/tip_of_the_day.cpp
+    src/client/translate_counter_name.cpp
+    src/client/update_downloader.cpp
+    src/server/user/user_context_menu.cpp
+    src/server/user/user_info_connection.cpp
+    src/server/user/user_info_box.cpp
+    src/server/user/user_list.cpp
+    src/client/ui/window_main.cpp
+    src/game/zones/view_zone_widget.cpp
+    src/game/zones/view_zone.cpp
     ${VERSION_STRING_CPP}
-    )
+)
 
 add_subdirectory(sounds)
 add_subdirectory(themes)
 
 set(cockatrice_RESOURCES cockatrice.qrc)
 
-IF(UPDATE_TRANSLATIONS)
-    FILE(GLOB_RECURSE translate_cockatrice_SRCS ${CMAKE_SOURCE_DIR}/cockatrice/src/*.cpp ${CMAKE_SOURCE_DIR}/cockatrice/src/*.h)
-    FILE(GLOB_RECURSE translate_common_SRCS ${CMAKE_SOURCE_DIR}/common/*.cpp ${CMAKE_SOURCE_DIR}/common/*.h)
-    SET(translate_SRCS ${translate_cockatrice_SRCS} ${translate_common_SRCS})
-    SET(cockatrice_TS "${CMAKE_CURRENT_SOURCE_DIR}/translations/cockatrice_en.ts")
-ELSE()
-    FILE(GLOB cockatrice_TS "${CMAKE_CURRENT_SOURCE_DIR}/translations/*.ts")
-ENDIF(UPDATE_TRANSLATIONS)
+if(UPDATE_TRANSLATIONS)
+  file(GLOB_RECURSE translate_cockatrice_SRCS ${CMAKE_SOURCE_DIR}/cockatrice/src/*.cpp
+       ${CMAKE_SOURCE_DIR}/cockatrice/src/*.h
+  )
+  file(GLOB_RECURSE translate_common_SRCS ${CMAKE_SOURCE_DIR}/common/*.cpp ${CMAKE_SOURCE_DIR}/common/*.h)
+  set(translate_SRCS ${translate_cockatrice_SRCS} ${translate_common_SRCS})
+  set(cockatrice_TS "${CMAKE_CURRENT_SOURCE_DIR}/cockatrice_en@source.ts")
+else()
+  file(GLOB cockatrice_TS "${CMAKE_CURRENT_SOURCE_DIR}/translations/*.ts")
+endif(UPDATE_TRANSLATIONS)
 
 if(WIN32)
-    set(cockatrice_SOURCES ${cockatrice_SOURCES} cockatrice.rc)
+  set(cockatrice_SOURCES ${cockatrice_SOURCES} cockatrice.rc)
 endif(WIN32)
 
 if(APPLE)
-    set(MACOSX_BUNDLE_ICON_FILE appicon.icns)
-    set_source_files_properties(${CMAKE_CURRENT_SOURCE_DIR}/resources/appicon.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
-    set(cockatrice_SOURCES ${cockatrice_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/resources/appicon.icns)
-ENDIF(APPLE)
+  set(MACOSX_BUNDLE_ICON_FILE appicon.icns)
+  set_source_files_properties(
+    ${CMAKE_CURRENT_SOURCE_DIR}/resources/appicon.icns PROPERTIES MACOSX_PACKAGE_LOCATION Resources
+  )
+  set(cockatrice_SOURCES ${cockatrice_SOURCES} ${CMAKE_CURRENT_SOURCE_DIR}/resources/appicon.icns)
+endif(APPLE)
 
-# Qt5
-find_package(Qt5 COMPONENTS Concurrent Multimedia Network PrintSupport Svg WebSockets Widgets REQUIRED)
-set(COCKATRICE_QT_MODULES Qt5::Concurrent Qt5::Multimedia Qt5::Network Qt5::PrintSupport Qt5::Svg Qt5::Widgets Qt5::WebSockets)
-
-# Qt5LinguistTools
-find_package(Qt5LinguistTools)
-if(Qt5LinguistTools_FOUND)
-    list(APPEND COCKATRICE_LIBS Qt5::LinguistTools)
-
-    if(NOT Qt5_LRELEASE_EXECUTABLE)
-        MESSAGE(WARNING "Qt's lrelease not found.")
-    endif()
-
-    if(UPDATE_TRANSLATIONS)
-        if(NOT Qt5_LUPDATE_EXECUTABLE)
-            MESSAGE(WARNING "Qt's lupdate not found.")
-        endif()
-        QT5_CREATE_TRANSLATION(cockatrice_QM ${translate_SRCS} ${cockatrice_TS})
-    else()
-        QT5_ADD_TRANSLATION(cockatrice_QM ${cockatrice_TS})
-    endif()
+if(Qt6_FOUND)
+  qt6_add_resources(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
+elseif(Qt5_FOUND)
+  qt5_add_resources(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
 endif()
 
-QT5_ADD_RESOURCES(cockatrice_RESOURCES_RCC ${cockatrice_RESOURCES})
-
 # Declare path variables
-set(ICONDIR share/icons CACHE STRING "icon dir")
-set(DESKTOPDIR share/applications CACHE STRING "desktop file destination")
+set(ICONDIR
+    share/icons
+    CACHE STRING "icon dir"
+)
+set(DESKTOPDIR
+    share/applications
+    CACHE STRING "desktop file destination"
+)
 
 # Include directories
-INCLUDE_DIRECTORIES(../common)
-INCLUDE_DIRECTORIES(${PROTOBUF_INCLUDE_DIR})
-INCLUDE_DIRECTORIES(${CMAKE_BINARY_DIR}/common)
-INCLUDE_DIRECTORIES(${CMAKE_CURRENT_BINARY_DIR})
+include_directories(../common)
+include_directories(${PROTOBUF_INCLUDE_DIR})
+include_directories(${CMAKE_BINARY_DIR}/common)
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
 
-# Build cockatrice binary and link it
-ADD_EXECUTABLE(cockatrice WIN32 MACOSX_BUNDLE ${cockatrice_SOURCES} ${cockatrice_QM} ${cockatrice_RESOURCES_RCC} ${cockatrice_MOC_SRCS})
+set(COCKATRICE_MAC_QM_INSTALL_DIR "cockatrice.app/Contents/Resources/translations")
+set(COCKATRICE_UNIX_QM_INSTALL_DIR "share/cockatrice/translations")
+set(COCKATRICE_WIN32_QM_INSTALL_DIR "translations")
 
-TARGET_LINK_LIBRARIES(cockatrice cockatrice_common ${COCKATRICE_QT_MODULES})
+if(Qt6_FOUND)
+  qt6_add_executable(
+    cockatrice
+    WIN32
+    MACOSX_BUNDLE
+    ${cockatrice_SOURCES}
+    ${cockatrice_RESOURCES_RCC}
+    ${cockatrice_MOC_SRCS}
+    MANUAL_FINALIZATION
+  )
+elseif(Qt5_FOUND)
+  # Qt5 Translations need to be linked at executable creation time
+  if(Qt5LinguistTools_FOUND)
+    if(UPDATE_TRANSLATIONS)
+      qt5_create_translation(cockatrice_QM ${translate_SRCS} ${cockatrice_TS})
+    else()
+      qt5_add_translation(cockatrice_QM ${cockatrice_TS})
+    endif()
+  endif()
+  add_executable(
+    cockatrice WIN32 MACOSX_BUNDLE ${cockatrice_MOC_SRCS} ${cockatrice_QM} ${cockatrice_RESOURCES_RCC}
+                                   ${cockatrice_SOURCES}
+  )
+  if(UNIX)
+    if(APPLE)
+      install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_MAC_QM_INSTALL_DIR})
+    else()
+      install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_UNIX_QM_INSTALL_DIR})
+    endif()
+  elseif(WIN32)
+    install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_WIN32_QM_INSTALL_DIR})
+  endif()
+endif()
+
+if(Qt5_FOUND)
+  target_link_libraries(cockatrice cockatrice_common ${COCKATRICE_QT_MODULES})
+else()
+  target_link_libraries(cockatrice PUBLIC cockatrice_common ${COCKATRICE_QT_MODULES})
+endif()
 
 if(UNIX)
-    if(APPLE)
-        set(MACOSX_BUNDLE_INFO_STRING "${PROJECT_NAME}")
-        set(MACOSX_BUNDLE_GUI_IDENTIFIER "com.cockatrice.${PROJECT_NAME}")
-        set(MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_NAME}-${PROJECT_VERSION}")
-        set(MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}")
-        set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
-        set(MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
+  if(APPLE)
+    set(MACOSX_BUNDLE_INFO_STRING "${PROJECT_NAME}")
+    set(MACOSX_BUNDLE_GUI_IDENTIFIER "com.cockatrice.${PROJECT_NAME}")
+    set(MACOSX_BUNDLE_LONG_VERSION_STRING "${PROJECT_NAME}-${PROJECT_VERSION}")
+    set(MACOSX_BUNDLE_BUNDLE_NAME "${PROJECT_NAME}")
+    set(MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION})
+    set(MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
 
-        set_target_properties(cockatrice PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/cmake/Info.plist)
+    set_target_properties(cockatrice PROPERTIES MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/cmake/Info.plist)
 
-        INSTALL(TARGETS cockatrice BUNDLE DESTINATION ./)
-        INSTALL(FILES ${cockatrice_QM} DESTINATION ./cockatrice.app/Contents/Resources/translations)
-    else()
-        # Assume linux
-        INSTALL(TARGETS cockatrice RUNTIME DESTINATION bin/)
-        INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/cockatrice.png DESTINATION ${ICONDIR}/hicolor/48x48/apps)
-        INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/cockatrice.svg DESTINATION ${ICONDIR}/hicolor/scalable/apps)
-        INSTALL(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cockatrice.desktop DESTINATION ${DESKTOPDIR})
-        INSTALL(FILES ${cockatrice_QM} DESTINATION share/cockatrice/translations)
-    endif()
+    install(TARGETS cockatrice BUNDLE DESTINATION ./)
+  else()
+    # Assume linux
+    install(TARGETS cockatrice RUNTIME DESTINATION bin/)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/cockatrice.png DESTINATION ${ICONDIR}/hicolor/48x48/apps)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/resources/cockatrice.svg DESTINATION ${ICONDIR}/hicolor/scalable/apps)
+    install(FILES ${CMAKE_CURRENT_SOURCE_DIR}/cockatrice.desktop DESTINATION ${DESKTOPDIR})
+  endif()
 elseif(WIN32)
-        INSTALL(TARGETS cockatrice RUNTIME DESTINATION ./)
-        INSTALL(FILES ${cockatrice_QM} DESTINATION ./translations)
+  install(TARGETS cockatrice RUNTIME DESTINATION ./)
 endif()
 
 if(APPLE)
-    # these needs to be relative to CMAKE_INSTALL_PREFIX
-    set(plugin_dest_dir cockatrice.app/Contents/Plugins)
-    set(qtconf_dest_dir cockatrice.app/Contents/Resources)
-    get_filename_component(QT_LIBRARY_DIR "${QT_LIBRARY_DIR}/.." ABSOLUTE)
+  # these needs to be relative to CMAKE_INSTALL_PREFIX
+  set(plugin_dest_dir cockatrice.app/Contents/Plugins)
+  set(qtconf_dest_dir cockatrice.app/Contents/Resources)
 
-    # qt5 plugins: audio, iconengines, imageformats, platforms, printsupport
-    install(DIRECTORY "${QT_PLUGINS_DIR}/" DESTINATION ${plugin_dest_dir} COMPONENT Runtime
-        FILES_MATCHING
-        PATTERN "*.dSYM" EXCLUDE
-        PATTERN "*_debug.dylib" EXCLUDE
-        PATTERN "audio/*.dylib"
-        PATTERN "iconengines/*.dylib"
-        PATTERN "imageformats/*.dylib"
-        PATTERN "platforms/*.dylib"
-        PATTERN "printsupport/*.dylib"
-        PATTERN "styles/*.dylib"
-    )
+  # Qt plugins: audio (Qt5), iconengines, imageformats, platforms, printsupport (Qt5), styles, tls (Qt6)
+  install(
+    DIRECTORY "${QT_PLUGINS_DIR}/"
+    DESTINATION ${plugin_dest_dir}
+    COMPONENT Runtime
+    FILES_MATCHING
+    PATTERN "*.dSYM" EXCLUDE
+    PATTERN "*_debug.dylib" EXCLUDE
+    PATTERN "audio/*.dylib"
+    PATTERN "iconengines/*.dylib"
+    PATTERN "imageformats/*.dylib"
+    PATTERN "platforms/*.dylib"
+    PATTERN "printsupport/*.dylib"
+    PATTERN "styles/*.dylib"
+    PATTERN "tls/*.dylib"
+  )
 
-    install(CODE "
+  install(
+    CODE "
         file(WRITE \"\${CMAKE_INSTALL_PREFIX}/${qtconf_dest_dir}/qt.conf\" \"[Paths]
 Plugins = Plugins
 Translations = Resources/translations
 Data = Resources\")
-    " COMPONENT Runtime)
+    "
+    COMPONENT Runtime
+  )
 
-    install(CODE "
+  install(
+    CODE "
         file(GLOB_RECURSE QTPLUGINS
             \"\${CMAKE_INSTALL_PREFIX}/${plugin_dest_dir}/*.dylib\")
         set(BU_CHMOD_BUNDLE_ITEMS ON)
         include(BundleUtilities)
         fixup_bundle(\"\${CMAKE_INSTALL_PREFIX}/cockatrice.app\" \"\${QTPLUGINS}\" \"${QT_LIBRARY_DIR}\")
-        " COMPONENT Runtime)
+        "
+    COMPONENT Runtime
+  )
 endif()
 
 if(WIN32)
-    # these needs to be relative to CMAKE_INSTALL_PREFIX
-    set(plugin_dest_dir Plugins)
-    set(qtconf_dest_dir .)
+  # these needs to be relative to CMAKE_INSTALL_PREFIX
+  set(plugin_dest_dir Plugins)
+  set(qtconf_dest_dir .)
 
-    install(DIRECTORY "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/${CMAKE_BUILD_TYPE}/" DESTINATION ./ FILES_MATCHING PATTERN "*.dll")
+  install(
+    DIRECTORY "${CMAKE_BINARY_DIR}/${PROJECT_NAME}/${CMAKE_BUILD_TYPE}/"
+    DESTINATION ./
+    FILES_MATCHING
+    PATTERN "*.dll"
+  )
 
-    # qt5 plugins: audio, iconengines, imageformats, platforms, printsupport
-    install(DIRECTORY "${QT_PLUGINS_DIR}/" DESTINATION ${plugin_dest_dir} COMPONENT Runtime
-        FILES_MATCHING REGEX "(audio|iconengines|imageformats|platforms|printsupport|styles)/.*[^d]\\.dll")
+  # Qt plugins: audio (Qt5), iconengines, imageformats, platforms, printsupport (Qt5), styles, tls (Qt6)
+  install(
+    DIRECTORY "${QT_PLUGINS_DIR}/"
+    DESTINATION ${plugin_dest_dir}
+    COMPONENT Runtime
+    FILES_MATCHING
+    PATTERN "audio/qtaudio_wasapi.dll"
+    PATTERN "audio/qtaudio_windows.dll"
+    PATTERN "iconengines/qsvgicon.dll"
+    PATTERN "imageformats/*.dll"
+    PATTERN "mediaservice/dsengine.dll"
+    PATTERN "mediaservice/wmfengine.dll"
+    PATTERN "platforms/qdirect2d.dll"
+    PATTERN "platforms/qminimal.dll"
+    PATTERN "platforms/qoffscreen.dll"
+    PATTERN "platforms/qwindows.dll"
+    PATTERN "printsupport/windowsprintersupport.dll"
+    PATTERN "styles/qcertonlybackend.dll"
+    PATTERN "styles/qopensslbackend.dll"
+    PATTERN "styles/qschannelbackend.dll"
+    PATTERN "styles/qwindowsvistastyle.dll"
+    PATTERN "tls/qcertonlybackend.dll"
+    PATTERN "tls/qopensslbackend.dll"
+    PATTERN "tls/qschannelbackend.dll"
+  )
 
-    install(CODE "
+  install(
+    CODE "
         file(WRITE \"\${CMAKE_INSTALL_PREFIX}/${qtconf_dest_dir}/qt.conf\" \"[Paths]
 Plugins = Plugins
 Translations = Resources/translations
 Data = Resources\")
-    " COMPONENT Runtime)
+    "
+    COMPONENT Runtime
+  )
 
-    install(CODE "
+  install(
+    CODE "
         file(GLOB_RECURSE QTPLUGINS
             \"\${CMAKE_INSTALL_PREFIX}/${plugin_dest_dir}/*.dll\")
         set(BU_CHMOD_BUNDLE_ITEMS ON)
         include(BundleUtilities)
         fixup_bundle(\"\${CMAKE_INSTALL_PREFIX}/Cockatrice.exe\" \"\${QTPLUGINS}\" \"${QT_LIBRARY_DIR}\")
-        " COMPONENT Runtime)
+        "
+    COMPONENT Runtime
+  )
 
-    if(WIN32SSLRUNTIME_FOUND)
-        install(FILES ${WIN32SSLRUNTIME_LIBRARIES} DESTINATION ./)
+  if(OPENSSL_FOUND)
+    install(FILES ${OPENSSL_INCLUDE_DIRS} DESTINATION ./)
+  endif()
+endif()
+
+if(Qt6_FOUND AND Qt6LinguistTools_FOUND)
+  #Qt6 Translations happen after the executable is built up
+  if(UPDATE_TRANSLATIONS)
+    qt6_add_translations(
+      cockatrice
+      TS_FILES
+      ${cockatrice_TS}
+      SOURCES
+      ${translate_SRCS}
+      QM_FILES_OUTPUT_VARIABLE
+      cockatrice_QM
+    )
+  else()
+    qt6_add_translations(cockatrice TS_FILES ${cockatrice_TS} QM_FILES_OUTPUT_VARIABLE cockatrice_QM)
+  endif()
+
+  if(UNIX)
+    if(APPLE)
+      install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_MAC_QM_INSTALL_DIR})
+    else()
+      install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_UNIX_QM_INSTALL_DIR})
     endif()
+  elseif(WIN32)
+    install(FILES ${cockatrice_QM} DESTINATION ${COCKATRICE_WIN32_QM_INSTALL_DIR})
+  endif()
+endif()
+
+if(Qt6_FOUND)
+  qt6_finalize_target(cockatrice)
 endif()

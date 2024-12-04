@@ -2,7 +2,7 @@
 #define SERVATRICE_SETTINGSCACHE_H
 
 #include <QList>
-#include <QRegExp>
+#include <QRegularExpression>
 #include <QSettings>
 #include <QString>
 
@@ -16,8 +16,8 @@ public:
     SettingsCache(const QString &fileName = "servatrice.ini",
                   QSettings::Format format = QSettings::IniFormat,
                   QObject *parent = 0);
-    static QString guessConfigurationPath(QString &specificPath);
-    QList<QRegExp> disallowedRegExp;
+    static QString guessConfigurationPath();
+    QList<QRegularExpression> disallowedRegExp;
     bool getIsPortableBuild() const
     {
         return isPortableBuild;

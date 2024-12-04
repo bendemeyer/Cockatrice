@@ -1,6 +1,6 @@
 #include "oracleimporter.h"
 
-#include "carddbparser/cockatricexml4.h"
+#include "game/cards/card_database_parser/cockatrice_xml_4.h"
 #include "qt-json/json.h"
 
 #include <QtWidgets>
@@ -17,6 +17,18 @@ SplitCardPart::SplitCardPart(const QString &_name,
 
 OracleImporter::OracleImporter(const QString &_dataDir, QObject *parent) : CardDatabase(parent), dataDir(_dataDir)
 {
+}
+
+CardSet::Priority OracleImporter::getSetPriority(QString &setType, QString &shortName)
+{
+    if (!setTypePriorities.contains(setType.toLower())) {
+        qDebug() << "warning: Set type" << setType << "unrecognized for prioritization";
+    }
+    CardSet::Priority priority = setTypePriorities.value(setType.toLower(), CardSet::PriorityOther);
+    if (nonEnglishSets.contains(shortName)) {
+        priority = CardSet::PriorityLowest;
+    }
+    return priority;
 }
 
 bool OracleImporter::readSetsFromByteArray(const QByteArray &data)
@@ -38,6 +50,7 @@ bool OracleImporter::readSetsFromByteArray(const QByteArray &data)
     QList<QVariant> setCards;
     QString setType;
     QDate releaseDate;
+    CardSet::Priority priority;
 
     while (it.hasNext()) {
         map = it.next().toMap();
@@ -45,6 +58,8 @@ bool OracleImporter::readSetsFromByteArray(const QByteArray &data)
         longName = map.value("name").toString();
         setCards = map.value("cards").toList();
         setType = map.value("type").toString();
+        releaseDate = map.value("releaseDate").toDate();
+        priority = getSetPriority(setType, shortName);
         // capitalize set type
         if (setType.length() > 0) {
             // basic grammar for words that aren't capitalized, like in "From the Vault"
@@ -62,12 +77,7 @@ bool OracleImporter::readSetsFromByteArray(const QByteArray &data)
             }
             setType = setType.trimmed();
         }
-        if (!nonEnglishSets.contains(shortName)) {
-            releaseDate = map.value("releaseDate").toDate();
-        } else {
-            releaseDate = QDate();
-        }
-        newSetList.append(SetToDownload(shortName, longName, setCards, setType, releaseDate));
+        newSetList.append(SetToDownload(shortName, longName, setCards, priority, setType, releaseDate));
     }
 
     std::sort(newSetList.begin(), newSetList.end());
@@ -116,7 +126,7 @@ CardInfoPtr OracleImporter::addCard(QString name,
         QStringList symbols = manacost.split("}");
         QString formattedCardCost;
         for (QString symbol : symbols) {
-            if (symbol.contains(QRegExp("[0-9WUBGRP]/[0-9WUBGRP]"))) {
+            if (symbol.contains(QRegularExpression("[0-9WUBGRP]/[0-9WUBGRP]"))) {
                 symbol.append("}");
             } else {
                 symbol.remove(QChar('{'));
@@ -141,9 +151,9 @@ CardInfoPtr OracleImporter::addCard(QString name,
     // DETECT CARD POSITIONING INFO
 
     // cards that enter the field tapped
-    bool cipt = text.contains("Hideaway") || text.contains(" it enters the battlefield tapped") ||
-                (text.contains(name + " enters the battlefield tapped") &&
-                 !text.contains(name + " enters the battlefield tapped unless"));
+    QRegularExpression ciptRegex("( it|" + QRegularExpression::escape(name) +
+                                 ") enters( the battlefield)? tapped(?! unless)");
+    bool cipt = ciptRegex.match(text).hasMatch();
 
     // table row
     int tableRow = 1;
@@ -189,8 +199,8 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet,
 {
     // mtgjson name => xml name
     static const QMap<QString, QString> cardProperties{
-        {"manaCost", "manacost"}, {"convertedManaCost", "cmc"}, {"type", "type"},
-        {"loyalty", "loyalty"},   {"layout", "layout"},         {"side", "side"},
+        {"manaCost", "manacost"}, {"manaValue", "cmc"}, {"type", "type"},
+        {"loyalty", "loyalty"},   {"layout", "layout"}, {"side", "side"},
     };
 
     // mtgjson name => xml name
@@ -203,7 +213,7 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet,
     QMap<QString, QList<SplitCardPart>> splitCards;
     QString ptSeparator("/");
     QVariantMap card;
-    QString layout, name, text, colors, colorIdentity, maintype, power, toughness, faceName;
+    QString layout, name, text, colors, colorIdentity, maintype, faceName;
     static const bool isToken = false;
     QVariantHash properties;
     CardInfoPerSet setInfo;
@@ -332,9 +342,13 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet,
             properties.insert("maintype", mainCardType);
         }
 
-        power = getStringPropertyFromMap(card, "power");
-        toughness = getStringPropertyFromMap(card, "toughness");
-        if (!(power.isEmpty() && toughness.isEmpty())) {
+        // Depending on whether power and/or toughness are present, the format
+        // is either P/T (most common), P (no toughness), or /T (no power).
+        QString power = getStringPropertyFromMap(card, "power");
+        QString toughness = getStringPropertyFromMap(card, "toughness");
+        if (toughness.isEmpty() && !power.isEmpty()) {
+            properties.insert("pt", power);
+        } else if (!toughness.isEmpty()) {
             properties.insert("pt", power + ptSeparator + toughness);
         }
 
@@ -345,8 +359,8 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet,
 
         // split cards are considered a single card, enqueue for later merging
         if (layout == "split" || layout == "aftermath" || layout == "adventure") {
-            auto faceName = getStringPropertyFromMap(card, "faceName");
-            SplitCardPart split(faceName, text, properties, setInfo);
+            auto _faceName = getStringPropertyFromMap(card, "faceName");
+            SplitCardPart split(_faceName, text, properties, setInfo);
             auto found_iter = splitCards.find(name);
             if (found_iter == splitCards.end()) {
                 splitCards.insert(name, {split});
@@ -361,21 +375,34 @@ int OracleImporter::importCardsFromSet(const CardSetPtr &currentSet,
 
             // add other face for split cards as card relation
             if (!getStringPropertyFromMap(card, "side").isEmpty()) {
-                properties["cmc"] = getStringPropertyFromMap(card, "faceConvertedManaCost");
+                properties["cmc"] = getStringPropertyFromMap(card, "faceManaValue");
                 if (layout == "meld") { // meld cards don't work
                     static const QRegularExpression meldNameRegex{"then meld them into ([^\\.]*)"};
                     QString additionalName = meldNameRegex.match(text).captured(1);
                     if (!additionalName.isNull()) {
-                        relatedCards.append(new CardRelation(additionalName, true));
+                        relatedCards.append(new CardRelation(additionalName, CardRelation::TransformInto));
                     }
                 } else {
                     for (const QString &additionalName : name.split(" // ")) {
                         if (additionalName != faceName) {
-                            relatedCards.append(new CardRelation(additionalName, true));
+                            relatedCards.append(new CardRelation(additionalName, CardRelation::TransformInto));
                         }
                     }
                 }
                 name = faceName;
+            }
+
+            // mtgjon related cards
+            if (card.contains("relatedCards")) {
+                QVariantMap givenRelated = card.value("relatedCards").toMap();
+                // conjured cards from a spellbook
+                if (givenRelated.contains("spellbook")) {
+                    auto spbk = givenRelated.value("spellbook").toStringList();
+                    for (const QString &spbkName : spbk) {
+                        relatedCards.append(
+                            new CardRelation(spbkName, CardRelation::DoesNotAttach, false, false, 1, true));
+                    }
+                }
             }
 
             CardInfoPtr newCard = addCard(name + numComponent, text, isToken, properties, relatedCards, setInfo);
@@ -476,8 +503,9 @@ int OracleImporter::startImport()
     sets.insert(TOKENS_SETNAME, tokenSet);
 
     for (const SetToDownload &curSetToParse : allSets) {
-        CardSetPtr newSet = CardSet::newInstance(curSetToParse.getShortName(), curSetToParse.getLongName(),
-                                                 curSetToParse.getSetType(), curSetToParse.getReleaseDate());
+        CardSetPtr newSet =
+            CardSet::newInstance(curSetToParse.getShortName(), curSetToParse.getLongName(), curSetToParse.getSetType(),
+                                 curSetToParse.getReleaseDate(), curSetToParse.getPriority());
         if (!sets.contains(newSet->getShortName()))
             sets.insert(newSet->getShortName(), newSet);
 

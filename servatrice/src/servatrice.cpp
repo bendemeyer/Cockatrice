@@ -20,6 +20,7 @@
 #include "servatrice.h"
 
 #include "decklist.h"
+#include "email_parser.h"
 #include "featureset.h"
 #include "isl_interface.h"
 #include "main.h"
@@ -76,6 +77,7 @@ Servatrice_GameServer::~Servatrice_GameServer()
         QThread *poolThread = connectionPools[i]->thread();
         connectionPools[i]->deleteLater(); // pool destructor calls thread()->quit()
         poolThread->wait();
+        poolThread->deleteLater();
     }
 }
 
@@ -84,6 +86,7 @@ void Servatrice_GameServer::incomingConnection(qintptr socketDescriptor)
     Servatrice_ConnectionPool *pool = findLeastUsedConnectionPool();
 
     auto ssi = new TcpServerSocketInterface(server, pool->getDatabaseInterface());
+    connect(ssi, SIGNAL(incTxBytes(qint64)), this, SLOT(incTxBytes(qint64)));
     ssi->moveToThread(pool->thread());
     pool->addClient();
     connect(ssi, SIGNAL(destroyed()), pool, SLOT(removeClient()));
@@ -104,7 +107,7 @@ Servatrice_ConnectionPool *Servatrice_GameServer::findLeastUsedConnectionPool()
         }
         debugStr.append(QString::number(clientCount));
     }
-    qDebug() << "Pool utilisation:" << debugStr;
+    qDebug().noquote() << "Pool utilisation:" << debugStr.join(", ");
     return connectionPools[poolIndex];
 }
 
@@ -144,6 +147,7 @@ Servatrice_WebsocketGameServer::~Servatrice_WebsocketGameServer()
         QThread *poolThread = connectionPools[i]->thread();
         connectionPools[i]->deleteLater(); // pool destructor calls thread()->quit()
         poolThread->wait();
+        poolThread->deleteLater();
     }
 }
 
@@ -152,6 +156,7 @@ void Servatrice_WebsocketGameServer::onNewConnection()
     Servatrice_ConnectionPool *pool = findLeastUsedConnectionPool();
 
     auto ssi = new WebsocketServerSocketInterface(server, pool->getDatabaseInterface());
+    connect(ssi, SIGNAL(incTxBytes(quint64)), this, SLOT(incTxBytes(quint64)));
     /*
      * Due to a Qt limitation, websockets can't be moved to another thread.
      * This will hopefully change in Qt6 if QtWebSocket will be integrated in QtNetwork
@@ -176,7 +181,7 @@ Servatrice_ConnectionPool *Servatrice_WebsocketGameServer::findLeastUsedConnecti
         }
         debugStr.append(QString::number(clientCount));
     }
-    qDebug() << "Pool utilisation:" << debugStr;
+    qDebug().noquote() << "Pool utilisation:" << debugStr.join(", ");
     return connectionPools[poolIndex];
 }
 
@@ -194,8 +199,8 @@ void Servatrice_IslServer::incomingConnection(qintptr socketDescriptor)
 }
 
 Servatrice::Servatrice(QObject *parent)
-    : Server(parent), authenticationMethod(AuthenticationNone), uptime(0), shutdownTimer(nullptr),
-      isFirstShutdownMessage(true)
+    : Server(parent), authenticationMethod(AuthenticationNone), uptime(0), txBytes(0), rxBytes(0),
+      shutdownTimer(nullptr)
 {
     qRegisterMetaType<QSqlDatabase>("QSqlDatabase");
 }
@@ -204,32 +209,16 @@ Servatrice::~Servatrice()
 {
     gameServer->close();
 
-    // clients live in other threads, we need to lock them
-    clientsLock.lockForRead();
-    for (auto client : clients)
-        QMetaObject::invokeMethod(client, "prepareDestroy", Qt::QueuedConnection);
-    clientsLock.unlock();
+    // we are destroying the clients outside their thread!
+    for (auto *client : clients) {
+        client->prepareDestroy();
+    }
 
-    // client destruction is asynchronous, wait for all clients to be gone
-    bool done = false;
+    if (shutdownTimer) {
+        shutdownTimer->deleteLater();
+    }
 
-    class SleeperThread : public QThread
-    {
-    public:
-        static void msleep(unsigned long msecs)
-        {
-            QThread::usleep(msecs);
-        }
-    };
-
-    do {
-        SleeperThread::msleep(10);
-        clientsLock.lockForRead();
-        if (clients.isEmpty())
-            done = true;
-        clientsLock.unlock();
-    } while (!done);
-
+    servatriceDatabaseInterface->deleteLater();
     prepareDestroy();
 }
 
@@ -252,49 +241,52 @@ bool Servatrice::initServer()
         authenticationMethod = AuthenticationNone;
     }
 
-    qDebug() << "Store Replays: " << getStoreReplaysEnabled();
-    qDebug() << "Client ID Required: " << getClientIDRequiredEnabled();
-    qDebug() << "Maximum user limit enabled: " << getMaxUserLimitEnabled();
+    qDebug() << "Store Replays:" << getStoreReplaysEnabled();
+    qDebug() << "Client ID Required:" << getClientIDRequiredEnabled();
+    qDebug() << "Maximum user limit enabled:" << getMaxUserLimitEnabled();
 
     if (getMaxUserLimitEnabled()) {
-        qDebug() << "Maximum total user limit: " << getMaxUserTotal();
-        qDebug() << "Maximum tcp user limit: " << getMaxTcpUserLimit();
-        qDebug() << "Maximum websocket user limit: " << getMaxWebSocketUserLimit();
+        qDebug() << "Maximum total user limit:" << getMaxUserTotal();
+        qDebug() << "Maximum tcp user limit:" << getMaxTcpUserLimit();
+        qDebug() << "Maximum websocket user limit:" << getMaxWebSocketUserLimit();
     }
 
-    qDebug() << "Accept registered users only: " << getRegOnlyServerEnabled();
-    qDebug() << "Registration enabled: " << getRegistrationEnabled();
+    qDebug() << "Accept registered users only:" << getRegOnlyServerEnabled();
+    qDebug() << "Registration enabled:" << getRegistrationEnabled();
     if (getRegistrationEnabled()) {
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
         QStringList emailBlackListFilters = getEmailBlackList().split(",", Qt::SkipEmptyParts);
+        QStringList emailWhiteListFilters = getEmailWhiteList().split(",", Qt::SkipEmptyParts);
 #else
         QStringList emailBlackListFilters = getEmailBlackList().split(",", QString::SkipEmptyParts);
+        QStringList emailWhiteListFilters = getEmailWhiteList().split(",", QString::SkipEmptyParts);
 #endif
-        qDebug() << "Email blacklist: " << emailBlackListFilters;
-        qDebug() << "Require email address to register: " << getRequireEmailForRegistrationEnabled();
-        qDebug() << "Require email activation via token: " << getRequireEmailActivationEnabled();
+        qDebug() << "Email blacklist:" << emailBlackListFilters;
+        qDebug() << "Email whitelist:" << emailWhiteListFilters;
+        qDebug() << "Require email address to register:" << getRequireEmailForRegistrationEnabled();
+        qDebug() << "Require email activation via token:" << getRequireEmailActivationEnabled();
         if (getMaxAccountsPerEmail()) {
-            qDebug() << "Maximum number of accounts per email: " << getMaxAccountsPerEmail();
+            qDebug() << "Maximum number of accounts per email:" << getMaxAccountsPerEmail();
         } else {
             qDebug() << "Maximum number of accounts per email: unlimited";
         }
-        qDebug() << "Enable Internal SMTP Client: " << getEnableInternalSMTPClient();
+        qDebug() << "Enable Internal SMTP Client:" << getEnableInternalSMTPClient();
         if (!getEnableInternalSMTPClient()) {
             qDebug() << "WARNING: Registrations are enabled but internal SMTP client is disabled.  Users activation "
                         "emails will not be automatically mailed to users!";
         }
     }
 
-    qDebug() << "Reset password enabled: " << getEnableForgotPassword();
+    qDebug() << "Reset password enabled:" << getEnableForgotPassword();
     if (getEnableForgotPassword()) {
-        qDebug() << "Reset password token life (in minutes): " << getForgotPasswordTokenLife();
-        qDebug() << "Reset password challenge on: " << getEnableForgotPasswordChallenge();
+        qDebug() << "Reset password token life (in minutes):" << getForgotPasswordTokenLife();
+        qDebug() << "Reset password challenge on:" << getEnableForgotPasswordChallenge();
     }
 
-    qDebug() << "Auditing enabled: " << getEnableAudit();
+    qDebug() << "Auditing enabled:" << getEnableAudit();
     if (getEnableAudit()) {
-        qDebug() << "Audit registration attempts enabled: " << getEnableRegistrationAudit();
-        qDebug() << "Audit reset password attepts enabled: " << getEnableForgotPasswordAudit();
+        qDebug() << "Audit registration attempts enabled:" << getEnableRegistrationAudit();
+        qDebug() << "Audit reset password attepts enabled:" << getEnableForgotPasswordAudit();
     }
 
     if (getDBTypeString() == "mysql") {
@@ -431,7 +423,7 @@ bool Servatrice::initServer()
     statusUpdateClock = new QTimer(this);
     connect(statusUpdateClock, SIGNAL(timeout()), this, SLOT(statusUpdate()));
     if (getServerStatusUpdateTime() != 0) {
-        qDebug() << "Starting status update clock, interval " << getServerStatusUpdateTime() << " ms";
+        qDebug() << "Starting status update clock, interval" << getServerStatusUpdateTime() << "ms";
         statusUpdateClock->start(getServerStatusUpdateTime());
     }
 
@@ -467,7 +459,7 @@ bool Servatrice::initServer()
     }
 
     if (getIdleClientTimeout() > 0) {
-        qDebug() << "Idle client timeout value: " << getIdleClientTimeout();
+        qDebug() << "Idle client timeout value:" << getIdleClientTimeout();
         if (getIdleClientTimeout() < 300)
             qDebug() << "WARNING: It is not recommended to set the IdleClientTimeout value very low.  Doing so will "
                         "cause clients to very quickly be disconnected.  Many players when connected may be searching "
@@ -567,7 +559,7 @@ void Servatrice::updateLoginMessage()
         }
 }
 
-void Servatrice::setRequiredFeatures(const QString featureList)
+void Servatrice::setRequiredFeatures(const QString &featureList)
 {
     FeatureSet features;
     serverRequiredFeatureList.clear();
@@ -578,10 +570,11 @@ void Servatrice::setRequiredFeatures(const QString featureList)
     QStringList listReqFeatures = featureList.split(",", QString::SkipEmptyParts);
 #endif
     if (!listReqFeatures.isEmpty())
-        foreach (QString reqFeature, listReqFeatures)
+        for (const QString &reqFeature : listReqFeatures) {
             features.enableRequiredFeature(serverRequiredFeatureList, reqFeature);
+        }
 
-    qDebug() << "Set required client features to: " << serverRequiredFeatureList;
+    qDebug() << "Set required client features to:" << serverRequiredFeatureList;
 }
 
 void Servatrice::statusUpdate()
@@ -635,7 +628,7 @@ void Servatrice::statusUpdate()
 
             while (servDbSelQuery->next()) {
                 const QString userName = servDbSelQuery->value(0).toString();
-                const QString emailAddress = servDbSelQuery->value(1).toString();
+                const auto emailAddress = EmailParser::getParsedEmailAddress(servDbSelQuery->value(1).toString());
                 const QString token = servDbSelQuery->value(2).toString();
 
                 if (smtpClient->enqueueActivationTokenMail(userName, emailAddress, token)) {
@@ -657,7 +650,7 @@ void Servatrice::statusUpdate()
 
             while (forgotPwQuery->next()) {
                 const QString userName = forgotPwQuery->value(0).toString();
-                const QString emailAddress = forgotPwQuery->value(1).toString();
+                const auto emailAddress = EmailParser::getParsedEmailAddress(forgotPwQuery->value(1).toString());
                 const QString token = forgotPwQuery->value(2).toString();
 
                 if (smtpClient->enqueueForgotPasswordTokenMail(userName, emailAddress, token)) {
@@ -723,22 +716,23 @@ void Servatrice::shutdownTimeout()
         clientsLock.unlock();
         delete se;
 
-        if (!shutdownMinutes)
+        if (!shutdownMinutes) {
             deleteLater();
+        }
     }
     shutdownMinutes--;
 }
 
-bool Servatrice::islConnectionExists(int serverId) const
+bool Servatrice::islConnectionExists(int _serverId) const
 {
     // Only call with islLock locked at least for reading
-    return islInterfaces.contains(serverId);
+    return islInterfaces.contains(_serverId);
 }
 
-void Servatrice::addIslInterface(int serverId, IslInterface *interface)
+void Servatrice::addIslInterface(int _serverId, IslInterface *interface)
 {
     // Only call with islLock locked for writing
-    islInterfaces.insert(serverId, interface);
+    islInterfaces.insert(_serverId, interface);
     connect(interface, SIGNAL(externalUserJoined(ServerInfo_User)), this, SLOT(externalUserJoined(ServerInfo_User)));
     connect(interface, SIGNAL(externalUserLeft(QString)), this, SLOT(externalUserLeft(QString)));
     connect(interface, SIGNAL(externalRoomUserJoined(int, ServerInfo_User)), this,
@@ -746,6 +740,8 @@ void Servatrice::addIslInterface(int serverId, IslInterface *interface)
     connect(interface, SIGNAL(externalRoomUserLeft(int, QString)), this, SLOT(externalRoomUserLeft(int, QString)));
     connect(interface, SIGNAL(externalRoomSay(int, QString, QString)), this,
             SLOT(externalRoomSay(int, QString, QString)));
+    connect(interface, SIGNAL(externalRoomRemoveMessages(int, QString, int)), this,
+            SLOT(externalRoomRemoveMessages(int, QString, int)));
     connect(interface, SIGNAL(externalRoomGameListChanged(int, ServerInfo_Game)), this,
             SLOT(externalRoomGameListChanged(int, ServerInfo_Game)));
     connect(interface, SIGNAL(joinGameCommandReceived(Command_JoinGame, int, int, int, qint64)), this,
@@ -758,24 +754,24 @@ void Servatrice::addIslInterface(int serverId, IslInterface *interface)
             SLOT(externalGameEventContainerReceived(GameEventContainer, qint64)));
 }
 
-void Servatrice::removeIslInterface(int serverId)
+void Servatrice::removeIslInterface(int _serverId)
 {
     // Only call with islLock locked for writing
     // XXX we probably need to delete everything that belonged to it...  <-- THIS SHOULD BE FIXED FOR ISL FUNCTIONALITY
     // TO WORK COMPLETLY!
-    islInterfaces.remove(serverId);
+    islInterfaces.remove(_serverId);
 }
 
-void Servatrice::doSendIslMessage(const IslMessage &msg, int serverId)
+void Servatrice::doSendIslMessage(const IslMessage &msg, int _serverId)
 {
     QReadLocker locker(&islLock);
 
-    if (serverId == -1) {
+    if (_serverId == -1) {
         QMapIterator<int, IslInterface *> islIterator(islInterfaces);
         while (islIterator.hasNext())
             islIterator.next().value()->transmitMessage(msg);
     } else {
-        IslInterface *interface = islInterfaces.value(serverId);
+        IslInterface *interface = islInterfaces.value(_serverId);
         if (interface)
             interface->transmitMessage(msg);
     }
@@ -816,7 +812,7 @@ bool Servatrice::getRegOnlyServerEnabled() const
 QString Servatrice::getAuthenticationMethodString() const
 {
     if (QProcessEnvironment::systemEnvironment().contains("DATABASE_URL")) {
-        return QString("sql");
+        return {"sql"};
     }
     return settingsCache->value("authentication/method").toString();
 }
@@ -859,7 +855,7 @@ QString Servatrice::getRequiredFeatures() const
 QString Servatrice::getDBTypeString() const
 {
     if (QProcessEnvironment::systemEnvironment().contains("DATABASE_URL")) {
-        return QString("mysql");
+        return {"mysql"};
     }
     return settingsCache->value("database/type").toString();
 }
@@ -867,7 +863,7 @@ QString Servatrice::getDBTypeString() const
 QString Servatrice::getDBPrefixString() const
 {
     if (QProcessEnvironment::systemEnvironment().contains("DATABASE_URL")) {
-        return QString("cockatrice");
+        return {"cockatrice"};
     }
     return settingsCache->value("database/prefix").toString();
 }
@@ -908,7 +904,7 @@ QString Servatrice::getDBPasswordString() const
 QString Servatrice::getRoomsMethodString() const
 {
     if (QProcessEnvironment::systemEnvironment().contains("DATABASE_URL")) {
-        return QString("sql");
+        return {"sql"};
     }
     return settingsCache->value("rooms/method").toString();
 }
@@ -1072,6 +1068,11 @@ bool Servatrice::getEnableForgotPasswordChallenge() const
 QString Servatrice::getEmailBlackList() const
 {
     return settingsCache->value("registration/emailproviderblacklist").toString();
+}
+
+QString Servatrice::getEmailWhiteList() const
+{
+    return settingsCache->value("registration/emailproviderwhitelist").toString();
 }
 
 bool Servatrice::getEnableAudit() const

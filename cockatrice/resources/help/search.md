@@ -1,6 +1,7 @@
-## Syntax Help
+## Search Syntax Help
 -----
-The search bar recognizes a set of special commands similar to some other card databases. Here is a list with examples. Each entry can be clicked to test the query and has a small explanation. Note that all searches are case insensitive.
+The search bar recognizes a set of special commands similar to some other card databases.<br>
+In this list of examples below, each entry has an explanation and can be clicked to test the query. Note that all searches are case insensitive.
 <dl>
 <dt>Name:</dt>
 <dd>[birds of paradise](#birds of paradise) <small>(Any card name containing the words birds, of, and paradise)</small></dd>
@@ -30,10 +31,10 @@ The search bar recognizes a set of special commands similar to some other card d
 <dd>[c:c](#c:c) <small>(Any colorless card)</small></dd>
 <dd>[ci:w](#ci:w) <small>(Any card that has white in it's color identity)</small></dd>
 
-<dt><u>Pow</u>er, <u>Tou</u>ghness, <u>C</u>onverted <u>M</u>ana <u>C</u>ost:</dt>
+<dt><u>Pow</u>er, <u>Tou</u>ghness, <u>M</u>ana <u>V</u>alue:</dt>
 <dd>[tou:1](#tou:1) <small>(Any card with a toughness of 1)</small></dd>
 <dd>[pow>=8](#pow>=8) <small>(Any card with a power greater than or equal to 8)</small></dd>
-<dd>[cmc=7](#cmc=7) <small>(Any card with a converted mana cost equal to 7)</small></dd>
+<dd>[mv=7](#mv=7) <small>(Any card with a mana value equal to 7)</small></dd>
 
 <dt><u>R</u>arity:</dt>
 <dd>[r:mythic](#r:mythic) <small>(Any card that has the mythic-rare rarity)</small></dd>
@@ -46,8 +47,7 @@ The search bar recognizes a set of special commands similar to some other card d
 
 <dt><u>E</u>dition:</dt>
 <dd>[set:lea](#set:lea) <small>(Cards that appear in Alpha, which has the set code LEA)</small></dd>
-<dd>[e:lea,leb](#e:lea,leb) <small>(Cards that appear in Alpha or Beta)</small></dd>
-<dd><a href="#e:lea,leb -(e:lea e:leb)">e:lea,leb -(e:lea e:leb)</a> <small>(Cards that appear in Alpha or Beta but not in both editions)</small></dd>
+<dd>[e:lea or e:leb](#e:lea or e:leb) <small>(Cards that appear in Alpha or Beta)</small></dd>
 
 <dt>Negate:</dt>
 <dd>[c:wu -c:m](#c:wu -c:m) <small>(Any card that is white or blue, but not multicolored)</small></dd>

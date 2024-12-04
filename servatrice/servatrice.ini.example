@@ -79,7 +79,7 @@ requiredfeatures=""
 ; You can define custom warnings that users are sent when the moderation staff uses the right client warn user
 ; menu option.  This list is comma seperated that each item will appear in the drop down list for staff members
 ; to choose from.  Example: "Flaming,Foul Language"
-officialwarnings="Flamming,Spamming,Causing Drama,Abusive Language"
+officialwarnings="Flaming,Spamming,Causing Drama,Abusive Language"
 
 ; Maximum time in seconds a player can stay connected but idle.  Default is 3600 (0 = disabled)
 ; Clients will be notified at the 90% time period of pending disconnection if they do not take action.
@@ -127,6 +127,16 @@ allowpunctuationprefix=false
 ; "admin,user,name"
 disallowedwords="admin"
 
+; Overwrite the words shown to the user when they enter a wrong username,
+; use \n to start a new line. Neither the real wordlist nor the disallowed
+; expressions will be sent to the user if this is set.
+; In the old versions of the client this list will be prefaced with
+; "can not contain any of the following words:"
+; example:
+;displaydisallowedwords="no attempts at impersonating staff\nno unparliamentary language\nno references to controversial figures\nstaff reserves the right to remove accounts deemed inappropriate"
+; Setting it to nothing will simply hide the list:
+;displaydisallowedwords=
+
 ; Disallow usernames matching these regular expressions. This list is comma
 ; separated, e.g. "\\w+\\d+,\\d{2}user", hence you cannot use commas in your
 ; expressions. Backslashes must be escaped, so `\w+\d+` becomes `\\w+\\d+`.
@@ -163,6 +173,14 @@ minpasswordlength = 6
 ; prevent users from registering accounts with providers such as gmail.com and hotmail.com
 ; Example: "10minutemail.com,gmail.com"
 ;emailproviderblacklist=""
+
+; You can require users to only use certain email domains for registration. This setting is a
+; comma-separated list of email provider domains that you have explicitly audited and require
+; the use of in order to create an account. Comparison's are explicit, so you must specify the
+; domain in completion, such as gmail.com and hotmail.com. Email whitelist is checked before
+; Email blacklist is checked, so an email cannot be in both setting configurations.
+; Example: "gmail.com,hotmail.com,icloud.com"
+;emailproviderwhitelist=""
 
 [forgotpassword]
 

@@ -1,15 +1,17 @@
-import * as _ from "lodash";
+import * as _ from 'lodash';
 
-import { GameSortField, UserSortField, SortDirection } from "types";
+import { GameSortField, UserSortField, SortDirection } from 'types';
 
-import { SortUtil } from "../common";
+import { SortUtil } from '../common';
 
-import { RoomsState } from "./rooms.interfaces"
-import { MAX_ROOM_MESSAGES, Types } from "./rooms.types";
+import { RoomsState } from './rooms.interfaces'
+import { MAX_ROOM_MESSAGES, Types } from './rooms.types';
 
 const initialState: RoomsState = {
   rooms: {},
-  joined: {},
+  games: {},
+  joinedRoomIds: {},
+  joinedGameIds: {},
   messages: {},
   sortGamesBy: {
     field: GameSortField.START_TIME,
@@ -22,12 +24,13 @@ const initialState: RoomsState = {
 };
 
 export const roomsReducer = (state = initialState, action: any) => {
-  switch(action.type) {
+  switch (action.type) {
     case Types.CLEAR_STORE: {
       return {
         ...initialState
       };
     }
+
     case Types.UPDATE_ROOMS: {
       const rooms = {
         ...state.rooms
@@ -37,7 +40,7 @@ export const roomsReducer = (state = initialState, action: any) => {
       _.each(action.rooms, (room, order) => {
         const { roomId } = room;
         const existing = rooms[roomId] || {};
-        
+
         const update = { ...room };
         delete update.gameList;
         delete update.gametypeList;
@@ -52,9 +55,10 @@ export const roomsReducer = (state = initialState, action: any) => {
 
       return { ...state, rooms };
     }
+
     case Types.JOIN_ROOM: {
       const { roomInfo } = action;
-      const { joined, rooms, sortGamesBy, sortUsersBy } = state;
+      const { joinedRoomIds, rooms, sortGamesBy, sortUsersBy } = state;
 
       const { roomId } = roomInfo;
 
@@ -81,18 +85,19 @@ export const roomsReducer = (state = initialState, action: any) => {
           }
         },
 
-        joined: {
-          ...joined,
+        joinedRoomIds: {
+          ...joinedRoomIds,
           [roomId]: true
         },
       }
     }
+
     case Types.LEAVE_ROOM: {
       const { roomId } = action;
-      const { joined, messages } = state;
+      const { joinedRoomIds, messages } = state;
 
       const _joined = {
-        ...joined
+        ...joinedRoomIds
       };
 
       const _messages = {
@@ -105,15 +110,16 @@ export const roomsReducer = (state = initialState, action: any) => {
       return {
         ...state,
 
-        joined: _joined,
+        joinedRoomIds: _joined,
         messages: _messages,
       }
     }
+
     case Types.ADD_MESSAGE: {
       const { roomId, message } = action;
       const { messages } = state;
 
-      let roomMessages = [ ...(messages[roomId] || []) ];
+      let roomMessages = [...(messages[roomId] || [])];
 
       if (roomMessages.length === MAX_ROOM_MESSAGES) {
         roomMessages.shift();
@@ -134,6 +140,7 @@ export const roomsReducer = (state = initialState, action: any) => {
       }
     }
     // @TODO improve this reducer, likely by improving the store model
+
     case Types.UPDATE_GAMES: {
       const { roomId, games } = action;
       const { rooms, sortGamesBy } = state;
@@ -150,7 +157,7 @@ export const roomsReducer = (state = initialState, action: any) => {
       }, {});
 
       const gameUpdates = room.gameList
-        // filter out closed games and remove from update map
+      // filter out closed games and remove from update map
         .filter(game => {
           const gameUpdate = toUpdate[game.gameId];
           const closedGame = gameUpdate && gameUpdate.closed;
@@ -181,7 +188,7 @@ export const roomsReducer = (state = initialState, action: any) => {
         _.each(toUpdate, game => gameUpdates.push(game));
       }
 
-      const gameList = [ ...gameUpdates ];
+      const gameList = [...gameUpdates];
 
       SortUtil.sortByField(gameList, sortGamesBy);
 
@@ -196,6 +203,7 @@ export const roomsReducer = (state = initialState, action: any) => {
         }
       }
     }
+
     case Types.USER_JOINED: {
       const { roomId, user } = action;
       const { rooms, sortUsersBy } = state;
@@ -216,16 +224,17 @@ export const roomsReducer = (state = initialState, action: any) => {
           [roomId]: {
             ...room,
             userList
-          } 
+          }
         }
       };
     }
+
     case Types.USER_LEFT: {
       const { roomId, name } = action;
       const { rooms } = state;
 
       const room = { ...rooms[roomId] };
-      const userList = room.userList.filter(user =>  user.name !== name);
+      const userList = room.userList.filter(user => user.name !== name);
 
       return {
         ...state,
@@ -234,15 +243,16 @@ export const roomsReducer = (state = initialState, action: any) => {
           [roomId]: {
             ...room,
             userList
-          } 
+          }
         }
       };
     }
+
     case Types.SORT_GAMES: {
       const { field, order, roomId } = action;
       const { rooms } = state;
 
-      const gameList = [ ...rooms[roomId].gameList ];
+      const gameList = [...rooms[roomId].gameList];
 
       const sortGamesBy = {
         field, order
@@ -264,6 +274,52 @@ export const roomsReducer = (state = initialState, action: any) => {
         sortGamesBy
       }
     }
+
+    case Types.REMOVE_MESSAGES: {
+      const { name, amount, roomId } = action;
+      const { messages } = state;
+      let amountRemoved = 0;
+
+      return {
+        ...state,
+        messages: {
+          ...messages,
+          [roomId]: messages[roomId]
+            .reverse()
+            .filter(({ message }) => {
+              if (amount === amountRemoved) {
+                return true;
+              }
+
+              const keep = message.indexOf(`${name}:`) !== 0;
+
+              if (!keep) {
+                amountRemoved++;
+              }
+
+              return keep;
+            })
+            .reverse()
+        }
+      }
+    }
+
+    case Types.JOINED_GAME: {
+      const { gameId, roomId } = action;
+      const { joinedGameIds } = state;
+
+      return {
+        ...state,
+        joinedGameIds: {
+          ...joinedGameIds,
+          [roomId]: {
+            ...joinedGameIds[roomId],
+            [gameId]: true,
+          }
+        }
+      }
+    }
+
     default:
       return state;
   }

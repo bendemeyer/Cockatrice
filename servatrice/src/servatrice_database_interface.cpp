@@ -56,7 +56,7 @@ bool Servatrice_DatabaseInterface::openDatabase()
         sqlDatabase.close();
 
     const QString poolStr = instanceId == -1 ? QString("main") : QString("pool %1").arg(instanceId);
-    qDebug() << QString("[%1] Opening database...").arg(poolStr);
+    qDebug().noquote() << QString("[%1] Opening database...").arg(poolStr);
     if (!sqlDatabase.open()) {
         qCritical() << QString("[%1] Error opening database: %2").arg(poolStr).arg(sqlDatabase.lastError().text());
         return false;
@@ -106,19 +106,21 @@ bool Servatrice_DatabaseInterface::checkSql()
     if (!sqlDatabase.isValid())
         return false;
 
-    if (!sqlDatabase.exec("select 1").isActive())
+    auto query = QSqlQuery(sqlDatabase);
+    if (query.exec("select 1") && query.isActive())
         return openDatabase();
     return true;
 }
 
 QSqlQuery *Servatrice_DatabaseInterface::prepareQuery(const QString &queryText)
 {
-    if (preparedStatements.contains(queryText))
+    if (preparedStatements.contains(queryText)) {
         return preparedStatements.value(queryText);
+    }
 
     QString prefixedQueryText = queryText;
     prefixedQueryText.replace("{prefix}", server->getDbPrefix());
-    QSqlQuery *query = new QSqlQuery(sqlDatabase);
+    auto *query = new QSqlQuery(sqlDatabase);
     query->prepare(prefixedQueryText);
 
     preparedStatements.insert(queryText, query);
@@ -152,7 +154,16 @@ bool Servatrice_DatabaseInterface::usernameIsValid(const QString &user, QString 
     QStringList disallowedWords = disallowedWordsStr.split(",", QString::SkipEmptyParts);
 #endif
     disallowedWords.removeDuplicates();
-    QString disallowedRegExpStr = settingsCache->value("users/disallowedregexp", "").toString();
+    QVariant displayDisallowedWords = settingsCache->value("users/displaydisallowedwords");
+    QString disallowedRegExpStr;
+    if (displayDisallowedWords.isValid()) {
+        disallowedWordsStr = displayDisallowedWords.toString().trimmed();
+        if (!disallowedWordsStr.isEmpty()) {
+            disallowedWordsStr.prepend("\n");
+        }
+    } else {
+        disallowedRegExpStr = settingsCache->value("users/disallowedregexp", "").toString();
+    }
 
     error = QString("%1|%2|%3|%4|%5|%6|%7|%8|%9")
                 .arg(minNameLength)
@@ -176,29 +187,29 @@ bool Servatrice_DatabaseInterface::usernameIsValid(const QString &user, QString 
             return false;
     }
 
-    for (const QRegExp &regExp : settingsCache->disallowedRegExp) {
-        if (regExp.exactMatch(user))
+    for (const QRegularExpression &regExp : settingsCache->disallowedRegExp) {
+        if (regExp.match(user).hasMatch())
             return false;
     }
 
-    QString regEx("[");
+    QString regEx("\\A[");
     if (allowLowercase)
         regEx.append("a-z");
     if (allowUppercase)
         regEx.append("A-Z");
     if (allowNumerics)
         regEx.append("0-9");
-    regEx.append(QRegExp::escape(allowedPunctuation));
-    regEx.append("]+");
+    regEx.append(QRegularExpression::escape(allowedPunctuation));
+    regEx.append("]+\\z");
 
-    static QRegExp re = QRegExp(regEx);
-    return re.exactMatch(user);
+    QRegularExpression re = QRegularExpression(regEx);
+    return re.match(user).hasMatch();
 }
 
 bool Servatrice_DatabaseInterface::registerUser(const QString &userName,
                                                 const QString &realName,
-                                                ServerInfo_User_Gender const &gender,
                                                 const QString &password,
+                                                bool passwordNeedsHash,
                                                 const QString &emailAddress,
                                                 const QString &country,
                                                 bool active)
@@ -206,19 +217,23 @@ bool Servatrice_DatabaseInterface::registerUser(const QString &userName,
     if (!checkSql())
         return false;
 
-    QString passwordSha512 = PasswordHasher::computeHash(password, PasswordHasher::generateRandomSalt());
+    QString passwordSha512;
+    if (passwordNeedsHash) {
+        passwordSha512 = PasswordHasher::computeHash(password, PasswordHasher::generateRandomSalt());
+    } else {
+        passwordSha512 = password;
+    }
     QString token = active ? QString() : PasswordHasher::generateActivationToken();
 
     QSqlQuery *query =
         prepareQuery("insert into {prefix}_users "
-                     "(name, realname, gender, password_sha512, email, country, registrationDate, active, token, "
+                     "(name, realname, password_sha512, email, country, registrationDate, active, token, "
                      "admin, avatar_bmp, clientid, privlevel, privlevelStartDate, privlevelEndDate) "
                      "values "
-                     "(:userName, :realName, :gender, :password_sha512, :email, :country, UTC_TIMESTAMP(), :active, "
+                     "(:userName, :realName, :password_sha512, :email, :country, UTC_TIMESTAMP(), :active, "
                      ":token, 0, '', '', 'NONE', UTC_TIMESTAMP(), UTC_TIMESTAMP())");
     query->bindValue(":userName", userName);
     query->bindValue(":realName", realName);
-    query->bindValue(":gender", getGenderChar(gender));
     query->bindValue(":password_sha512", passwordSha512);
     query->bindValue(":email", emailAddress);
     query->bindValue(":country", country);
@@ -268,26 +283,13 @@ bool Servatrice_DatabaseInterface::activateUser(const QString &userName, const Q
     return false;
 }
 
-QChar Servatrice_DatabaseInterface::getGenderChar(ServerInfo_User_Gender const &gender)
-{
-    switch (gender) {
-        case ServerInfo_User_Gender_GenderUnknown:
-            return QChar('u');
-        case ServerInfo_User_Gender_Male:
-            return QChar('m');
-        case ServerInfo_User_Gender_Female:
-            return QChar('f');
-        default:
-            return QChar('u');
-    }
-}
-
 AuthenticationResult Servatrice_DatabaseInterface::checkUserPassword(Server_ProtocolHandler *handler,
                                                                      const QString &user,
                                                                      const QString &password,
                                                                      const QString &clientId,
                                                                      QString &reasonStr,
-                                                                     int &banSecondsLeft)
+                                                                     int &banSecondsLeft,
+                                                                     bool passwordNeedsHash)
 {
     switch (server->getAuthenticationMethod()) {
         case Servatrice::AuthenticationNone:
@@ -318,13 +320,19 @@ AuthenticationResult Servatrice_DatabaseInterface::checkUserPassword(Server_Prot
             }
 
             if (passwordQuery->next()) {
-                const QString correctPassword = passwordQuery->value(0).toString();
+                const QString correctPasswordSha512 = passwordQuery->value(0).toString();
                 const bool userIsActive = passwordQuery->value(1).toBool();
                 if (!userIsActive) {
                     qDebug("Login denied: user not active");
                     return UserIsInactive;
                 }
-                if (correctPassword == PasswordHasher::computeHash(password, correctPassword.left(16))) {
+                QString hashedPassword;
+                if (passwordNeedsHash) {
+                    hashedPassword = PasswordHasher::computeHash(password, correctPasswordSha512.left(16));
+                } else {
+                    hashedPassword = password;
+                }
+                if (correctPasswordSha512 == hashedPassword) {
                     qDebug("Login accepted: password right");
                     return PasswordRight;
                 } else {
@@ -490,6 +498,28 @@ bool Servatrice_DatabaseInterface::userExists(const QString &user)
     return false;
 }
 
+QString Servatrice_DatabaseInterface::getUserSalt(const QString &user)
+{
+    if (server->getAuthenticationMethod() == Servatrice::AuthenticationSql) {
+        checkSql();
+
+        QSqlQuery *query =
+            prepareQuery("SELECT SUBSTRING(password_sha512, 1, 16) FROM {prefix}_users WHERE name = :name");
+
+        query->bindValue(":name", user);
+        if (!execSqlQuery(query)) {
+            return {};
+        }
+
+        if (!query->next()) {
+            return {};
+        }
+
+        return query->value(0).toString();
+    }
+    return {};
+}
+
 int Servatrice_DatabaseInterface::getUserIdInDB(const QString &name)
 {
     if (server->getAuthenticationMethod() == Servatrice::AuthenticationSql) {
@@ -573,31 +603,26 @@ ServerInfo_User Servatrice_DatabaseInterface::evalUserQueryResult(const QSqlQuer
         result.set_privlevel(privlevel.toStdString());
 
     if (complete) {
-        const QString genderStr = query->value(5).toString();
-        if (genderStr == "m")
-            result.set_gender(ServerInfo_User::Male);
-        else if (genderStr == "f")
-            result.set_gender(ServerInfo_User::Female);
-
-        const QString realName = query->value(6).toString();
+        const QString realName = query->value(5).toString();
         if (!realName.isEmpty())
             result.set_real_name(realName.toStdString());
 
-        const QByteArray avatarBmp = query->value(7).toByteArray();
+        const QByteArray avatarBmp = query->value(6).toByteArray();
         if (avatarBmp.size())
             result.set_avatar_bmp(avatarBmp.data(), avatarBmp.size());
 
-        const QDateTime regDate = query->value(8).toDateTime();
+        const QDateTime regDate = query->value(7).toDateTime();
         if (!regDate.toString(Qt::ISODate).isEmpty()) {
-            qint64 accountAgeInSeconds = regDate.secsTo(QDateTime::currentDateTime());
+            // the registration date is in utc
+            qint64 accountAgeInSeconds = regDate.secsTo(QDateTime::currentDateTimeUtc());
             result.set_accountage_secs(accountAgeInSeconds);
         }
 
-        const QString email = query->value(9).toString();
+        const QString email = query->value(8).toString();
         if (!email.isEmpty())
             result.set_email(email.toStdString());
 
-        const QString clientid = query->value(10).toString();
+        const QString clientid = query->value(9).toString();
         if (!clientid.isEmpty())
             result.set_clientid(clientid.toStdString());
     }
@@ -615,7 +640,7 @@ ServerInfo_User Servatrice_DatabaseInterface::getUserData(const QString &name, b
             return result;
 
         QSqlQuery *query =
-            prepareQuery("select id, name, admin, country, privlevel, gender, realname, avatar_bmp, registrationDate, "
+            prepareQuery("select id, name, admin, country, privlevel, realname, avatar_bmp, registrationDate, "
                          "email, clientid from {prefix}_users where name = :name and active = 1");
         query->bindValue(":name", name);
         if (!execSqlQuery(query))
@@ -810,9 +835,9 @@ void Servatrice_DatabaseInterface::storeGameInformation(const QString &roomName,
     for (int i = 0; i < replayList.size(); ++i) {
         QByteArray blob;
 #if GOOGLE_PROTOBUF_VERSION > 3001000
-        const unsigned int size = replayList[i]->ByteSizeLong();
+        const unsigned int size = static_cast<unsigned int>(replayList[i]->ByteSizeLong());
 #else
-        const unsigned int size = replayList[i]->ByteSize();
+        const unsigned int size = static_cast<unsigned int>(replayList[i]->ByteSize());
 #endif
         blob.resize(size);
         replayList[i]->SerializeToArray(blob.data(), size);
@@ -928,9 +953,29 @@ void Servatrice_DatabaseInterface::logMessage(const int senderId,
 }
 
 bool Servatrice_DatabaseInterface::changeUserPassword(const QString &user,
+                                                      const QString &password,
+                                                      bool passwordNeedsHash)
+{
+    QString passwordSha512 = password;
+    if (passwordNeedsHash) {
+        passwordSha512 = PasswordHasher::computeHash(password, PasswordHasher::generateRandomSalt());
+    }
+
+    QSqlQuery *passwordQuery = prepareQuery("update {prefix}_users set password_sha512=:password, "
+                                            "passwordLastChangedDate = NOW() where name = :name");
+    passwordQuery->bindValue(":password", passwordSha512);
+    passwordQuery->bindValue(":name", user);
+    if (execSqlQuery(passwordQuery))
+        return true;
+
+    return false;
+}
+
+bool Servatrice_DatabaseInterface::changeUserPassword(const QString &user,
                                                       const QString &oldPassword,
+                                                      bool oldPasswordNeedsHash,
                                                       const QString &newPassword,
-                                                      const bool &force = false)
+                                                      bool newPasswordNeedsHash)
 {
     if (server->getAuthenticationMethod() != Servatrice::AuthenticationSql)
         return false;
@@ -945,30 +990,24 @@ bool Servatrice_DatabaseInterface::changeUserPassword(const QString &user,
     QSqlQuery *passwordQuery = prepareQuery("select password_sha512 from {prefix}_users where name = :name");
     passwordQuery->bindValue(":name", user);
 
-    if (!force) {
-        if (!execSqlQuery(passwordQuery)) {
-            qDebug("Change password denied: SQL error");
-            return false;
-        }
-
-        if (!passwordQuery->next())
-            return false;
-
-        const QString correctPassword = passwordQuery->value(0).toString();
-        if (correctPassword != PasswordHasher::computeHash(oldPassword, correctPassword.left(16)))
-            return false;
+    if (!execSqlQuery(passwordQuery)) {
+        qDebug("Change password denied: SQL error");
+        return false;
     }
 
-    QString passwordSha512 = PasswordHasher::computeHash(newPassword, PasswordHasher::generateRandomSalt());
+    if (!passwordQuery->next())
+        return false;
 
-    passwordQuery = prepareQuery("update {prefix}_users set password_sha512=:password, "
-                                 "passwordLastChangedDate = NOW() where name = :name");
-    passwordQuery->bindValue(":password", passwordSha512);
-    passwordQuery->bindValue(":name", user);
-    if (execSqlQuery(passwordQuery))
-        return true;
+    const QString correctPasswordSha512 = passwordQuery->value(0).toString();
+    QString oldPasswordSha512 = oldPassword;
+    if (oldPasswordNeedsHash) {
+        QString salt = correctPasswordSha512.left(16);
+        oldPasswordSha512 = PasswordHasher::computeHash(oldPassword, salt);
+    }
+    if (correctPasswordSha512 != oldPasswordSha512)
+        return false;
 
-    return false;
+    return changeUserPassword(user, newPassword, newPasswordNeedsHash);
 }
 
 int Servatrice_DatabaseInterface::getActiveUserCount(QString connectionType)

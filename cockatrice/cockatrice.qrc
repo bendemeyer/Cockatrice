@@ -126,6 +126,7 @@
         <file>resources/countries/er.svg</file>
         <file>resources/countries/es.svg</file>
         <file>resources/countries/et.svg</file>
+        <file>resources/countries/eu.svg</file>
         <file>resources/countries/fi.svg</file>
         <file>resources/countries/fj.svg</file>
         <file>resources/countries/fk.svg</file>
@@ -301,15 +302,12 @@
         <file>resources/countries/vu.svg</file>
         <file>resources/countries/wf.svg</file>
         <file>resources/countries/ws.svg</file>
+        <file>resources/countries/xk.svg</file>
         <file>resources/countries/ye.svg</file>
         <file>resources/countries/yt.svg</file>
         <file>resources/countries/za.svg</file>
         <file>resources/countries/zm.svg</file>
         <file>resources/countries/zw.svg</file>
-
-        <file>resources/genders/male.svg</file>
-        <file>resources/genders/female.svg</file>
-        <file>resources/genders/unknown.svg</file>
 
         <file>resources/phases/untap.svg</file>
         <file>resources/phases/upkeep.svg</file>
@@ -353,10 +351,10 @@
         <file>resources/tips/images/cockatrice_wiki.png</file>
         <file>resources/tips/images/coin_flip.png</file>
         <file>resources/tips/images/counter_expression.png</file>
+        <file>resources/tips/images/discord.png</file>
         <file>resources/tips/images/face_down.png</file>
         <file>resources/tips/images/filter_games.png</file>
         <file>resources/tips/images/github_logo.png</file>
-        <file>resources/tips/images/gitter.png</file>
         <file>resources/tips/images/setpt.png</file>
         <file>resources/tips/images/shortcuts.png</file>
         <file>resources/tips/images/themes.png</file>

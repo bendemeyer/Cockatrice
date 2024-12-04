@@ -63,6 +63,7 @@ protected slots:
     virtual void flushOutputQueue() = 0;
 signals:
     void outputQueueChanged();
+    void incTxBytes(qint64 amount);
 
 protected:
     void logDebugMessage(const QString &message);
@@ -109,9 +110,14 @@ private:
     Response::ResponseCode cmdReloadConfig(const Command_ReloadConfig & /* cmd */, ResponseContainer & /*rc*/);
     Response::ResponseCode cmdAdjustMod(const Command_AdjustMod &cmd, ResponseContainer & /*rc*/);
     Response::ResponseCode cmdForgotPasswordRequest(const Command_ForgotPasswordRequest &cmd, ResponseContainer &rc);
+    Response::ResponseCode continuePasswordRequest(const QString &userName,
+                                                   const QString &clientId,
+                                                   ResponseContainer &rc,
+                                                   bool challenged = false);
     Response::ResponseCode cmdForgotPasswordReset(const Command_ForgotPasswordReset &cmd, ResponseContainer &rc);
     Response::ResponseCode cmdForgotPasswordChallenge(const Command_ForgotPasswordChallenge &cmd,
                                                       ResponseContainer &rc);
+    Response::ResponseCode cmdRequestPasswordSalt(const Command_RequestPasswordSalt &cmd, ResponseContainer &rc);
     Response::ResponseCode processExtendedSessionCommand(int cmdType, const SessionCommand &cmd, ResponseContainer &rc);
     Response::ResponseCode
     processExtendedModeratorCommand(int cmdType, const ModeratorCommand &cmd, ResponseContainer &rc);
@@ -125,6 +131,7 @@ private:
     bool removeAdminFlagFromUser(const QString &user, int flag);
 
     bool isPasswordLongEnough(const int passwordLength);
+    void removeSaidMessages(const QString &userName, int amount);
 
 public:
     AbstractServerSocketInterface(Servatrice *_server,
@@ -192,7 +199,7 @@ class WebsocketServerSocketInterface : public AbstractServerSocketInterface
 public:
     WebsocketServerSocketInterface(Servatrice *_server,
                                    Servatrice_DatabaseInterface *_databaseInterface,
-                                   QObject *parent = 0);
+                                   QObject *parent = nullptr);
     ~WebsocketServerSocketInterface();
 
     QHostAddress getPeerAddress() const

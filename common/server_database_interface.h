@@ -18,7 +18,8 @@ public:
                                                    const QString &password,
                                                    const QString &clientId,
                                                    QString &reasonStr,
-                                                   int &secondsLeft) = 0;
+                                                   int &secondsLeft,
+                                                   bool passwordNeedsHash) = 0;
     virtual bool checkUserIsBanned(const QString & /* ipAddress */,
                                    const QString & /* userName */,
                                    const QString & /* clientId */,
@@ -34,6 +35,10 @@ public:
     virtual bool userExists(const QString & /* user */)
     {
         return false;
+    }
+    virtual QString getUserSalt(const QString & /* user */)
+    {
+        return {};
     }
     virtual QMap<QString, ServerInfo_User> getBuddyList(const QString & /* name */)
     {
@@ -109,8 +114,8 @@ public:
     }
     virtual bool registerUser(const QString & /* userName */,
                               const QString & /* realName */,
-                              ServerInfo_User_Gender const & /* gender */,
                               const QString & /* password */,
+                              bool /* passwordNeedsHash */,
                               const QString & /* emailAddress */,
                               const QString & /* country */,
                               bool /* active = false */)
@@ -142,21 +147,28 @@ public:
                             LogMessage_TargetType /* targetType */,
                             const int /* targetId */,
                             const QString & /* targetName */){};
-    bool checkUserIsBanned(Server_ProtocolHandler *session, QString &banReason, int &banSecondsRemaining);
+    virtual bool checkUserIsBanned(Server_ProtocolHandler * /* session */,
+                                   QString & /* banReason */,
+                                   int & /* banSecondsRemaining */)
+    {
+        return false;
+    };
     virtual int checkNumberOfUserAccounts(const QString & /* email */)
     {
         return 0;
     };
-    virtual bool changeUserPassword(const QString & /* user */,
-                                    const QString & /* oldPassword */,
-                                    const QString & /* newPassword */,
-                                    const bool & /* force */)
+    virtual bool
+    changeUserPassword(const QString & /* user */, const QString & /* password */, bool /* passwordNeedsHash */)
     {
         return false;
     };
-    virtual QChar getGenderChar(ServerInfo_User_Gender const & /* gender */)
+    virtual bool changeUserPassword(const QString & /* user */,
+                                    const QString & /* oldPassword */,
+                                    bool /* oldPasswordNeedsHash */,
+                                    const QString & /* newPassword */,
+                                    bool /* newPasswordNeedsHash */)
     {
-        return QChar('u');
+        return false;
     };
 };
 

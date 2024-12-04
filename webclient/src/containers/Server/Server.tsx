@@ -1,159 +1,77 @@
 // eslint-disable-next-line
 import React, { Component } from "react";
-import { connect } from "react-redux";
-import { withRouter } from "react-router-dom";
+import { connect } from 'react-redux';
+import { generatePath, useNavigate } from 'react-router-dom';
 
-import Button from "@material-ui/core/Button";
-import ListItem from "@material-ui/core/ListItem";
-import Paper from "@material-ui/core/Paper";
+import ListItem from '@mui/material/ListItem';
+import Paper from '@mui/material/Paper';
 
-import { RoomsSelectors, ServerSelectors } from "store";
-
-import { AuthenticationService } from "api";
-
-import { ThreePaneLayout, UserDisplay, VirtualList } from "components";
-import { ConnectForm, RegisterForm } from "forms";
-import { Room, StatusEnum, User } from "types";
+import { AuthGuard, ThreePaneLayout, UserDisplay, VirtualList } from 'components';
+import { useReduxEffect } from 'hooks';
+import { RoomsSelectors, RoomsTypes, ServerSelectors } from 'store';
+import { Room, RouteEnum, User } from 'types';
 import Rooms from './Rooms';
+import Layout from 'containers/Layout/Layout';
 
-import "./Server.css";
+import './Server.css';
 
-class Server extends Component<ServerProps, ServerState> {
-  constructor(props) {
-    super(props);
+const Server = ({ message, rooms, joinedRooms, users }: ServerProps) => {
+  const navigate = useNavigate();
 
-    this.showDescription = this.showDescription.bind(this);
-    this.showRegisterForm = this.showRegisterForm.bind(this);
-    this.hideRegisterForm = this.hideRegisterForm.bind(this);
-    this.onRegister = this.onRegister.bind(this);
+  useReduxEffect((action: any) => {
+    const roomId = action.roomInfo.roomId.toString();
+    navigate(generatePath(RouteEnum.ROOM, { roomId }));
+  }, RoomsTypes.JOIN_ROOM, []);
 
-    this.state = {
-      register: false
-    };
-  }
+  return (
+    <Layout className="server-rooms">
+      <AuthGuard />
 
-  showDescription(state, description) {
-    const isDisconnected = state === StatusEnum.DISCONNECTED;
-    const hasDescription = description && !!description.length;
+      <ThreePaneLayout
+        top={(
+          <Paper className="serverRoomWrapper overflow-scroll">
+            <Rooms rooms={rooms} joinedRooms={joinedRooms} />
+          </Paper>
+        )}
 
-    return isDisconnected && hasDescription;
-  }
+        bottom={(
+          <Paper className="serverMessage overflow-scroll">
+            <div className="serverMessage__content" dangerouslySetInnerHTML={{ __html: message }} />
+          </Paper>
+        )}
 
-  showRegisterForm() {
-    this.setState({register: true});
-  }
-
-  hideRegisterForm() {
-    this.setState({register: false});
-  }
-
-  onRegister(fields) {
-    console.log("register", fields);
-  }
-
-  render() {
-    const { message, rooms, joinedRooms, history, state, description, users } = this.props;
-    const { register } = this.state;
-    const isConnected = AuthenticationService.isConnected(state);
-
-    return (
-      <div className="server">
-            {
-              isConnected
-                ? ( <ServerRooms rooms={rooms} joinedRooms={joinedRooms} history={history} message={message} users={users} /> )
-                : (
-                  <div className="server-connect">
-                    <Paper className="server-connect__form">
-                      {
-                        register
-                          ? ( <Register connect={this.hideRegisterForm} onRegister={this.onRegister} /> )
-                          : ( <Connect register={this.showRegisterForm} /> )
-                      }
-                    </Paper>
-                  </div>
-                )
-            }
-          {
-            !isConnected && this.showDescription(state, description) && (
-              <Paper className="server-connect__description">
-                {description}
-              </Paper>
-            )
-          }
-      </div>
-    );
-  }
+        side={(
+          <Paper className="server-rooms__side overflow-scroll">
+            <div className="server-rooms__side-label">
+              Users connected to server: {users.length}
+            </div>
+            <VirtualList
+              itemKey={(index) => users[index].name }
+              items={ users.map(user => (
+                <ListItem button dense>
+                  <UserDisplay user={user} />
+                </ListItem>
+              )) }
+            />
+          </Paper>
+        )}
+      />
+    </Layout>
+  );
 }
-
-const ServerRooms = ({ rooms, joinedRooms, history, message, users}) => (
-  <div className="server-rooms">
-    <ThreePaneLayout
-      top={(
-        <Paper className="serverRoomWrapper overflow-scroll">
-          <Rooms rooms={rooms} joinedRooms={joinedRooms} history={history} />
-        </Paper>
-      )}
-
-      bottom={(
-        <Paper className="serverMessage overflow-scroll">
-          <div className="serverMessage__content" dangerouslySetInnerHTML={{ __html: message }} />
-        </Paper>
-      )}
-
-      side={(
-        <Paper className="server-rooms__side overflow-scroll">
-          <div className="server-rooms__side-label">
-            Users connected to server: {users.length}
-          </div>
-          <VirtualList
-            itemKey={(index, data) => users[index].name }
-            items={ users.map(user => (
-              <ListItem button dense>
-                <UserDisplay user={user} />
-              </ListItem>
-            ) ) }
-          />
-        </Paper>
-      )}
-    />
-  </div>
-);
-
-const Connect = ({register}) => (
-  <div className="form-wrapper">
-    <ConnectForm onSubmit={AuthenticationService.connect} />
-    {/*{<Button variant="outlined" onClick={register}>Register</Button>}*/}
-  </div>
-);
-
-const Register = ({ onRegister, connect }) => (
-  <div className="form-wrapper">
-    <RegisterForm onSubmit={event => onRegister(event)} />
-    <Button variant="outlined" onClick={connect}>Connect</Button>
-  </div>
-);
 
 interface ServerProps {
   message: string;
-  state: number;
-  description: string;
   rooms: Room[];
   joinedRooms: Room[];
   users: User[];
-  history: any;
-}
-
-interface ServerState {
-  register: boolean;
 }
 
 const mapStateToProps = state => ({
   message: ServerSelectors.getMessage(state),
-  state: ServerSelectors.getState(state),
-  description: ServerSelectors.getDescription(state),
   rooms: RoomsSelectors.getRooms(state),
   joinedRooms: RoomsSelectors.getJoinedRooms(state),
   users: ServerSelectors.getUsers(state)
 });
 
-export default withRouter(connect(mapStateToProps)(Server));
+export default connect(mapStateToProps)(Server);

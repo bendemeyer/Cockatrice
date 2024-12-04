@@ -1,11 +1,13 @@
 #include "isl_interface.h"
 
+#include "debug_pb_message.h"
 #include "get_pb_extension.h"
 #include "main.h"
 #include "pb/event_game_joined.pb.h"
 #include "pb/event_join_room.pb.h"
 #include "pb/event_leave_room.pb.h"
 #include "pb/event_list_games.pb.h"
+#include "pb/event_remove_messages.pb.h"
 #include "pb/event_room_say.pb.h"
 #include "pb/event_server_complete_list.pb.h"
 #include "pb/event_user_joined.pb.h"
@@ -271,9 +273,9 @@ void IslInterface::transmitMessage(const IslMessage &item)
 {
     QByteArray buf;
 #if GOOGLE_PROTOBUF_VERSION > 3001000
-    unsigned int size = item.ByteSizeLong();
+    unsigned int size = static_cast<unsigned int>(item.ByteSizeLong());
 #else
-    unsigned int size = item.ByteSize();
+    unsigned int size = static_cast<unsigned int>(item.ByteSize());
 #endif
     buf.resize(size + 4);
     item.SerializeToArray(buf.data() + 4, size);
@@ -348,6 +350,11 @@ void IslInterface::roomEvent_ListGames(int roomId, const Event_ListGames &event)
     }
 }
 
+void IslInterface::roomEvent_RemoveMessages(int roomId, const Event_RemoveMessages &event)
+{
+    emit externalRoomRemoveMessages(roomId, QString::fromStdString(event.name()), event.amount());
+}
+
 void IslInterface::roomCommand_JoinGame(const Command_JoinGame &cmd, int cmdId, int roomId, qint64 sessionId)
 {
     emit joinGameCommandReceived(cmd, cmdId, roomId, serverId, sessionId);
@@ -409,6 +416,9 @@ void IslInterface::processRoomEvent(const RoomEvent &event)
         case RoomEvent::LIST_GAMES:
             roomEvent_ListGames(event.room_id(), event.GetExtension(Event_ListGames::ext));
             break;
+        case RoomEvent::REMOVE_MESSAGES:
+            roomEvent_RemoveMessages(event.room_id(), event.GetExtension(Event_RemoveMessages::ext));
+            break;
         default:;
     }
 }
@@ -428,7 +438,7 @@ void IslInterface::processRoomCommand(const CommandContainer &cont, qint64 sessi
 
 void IslInterface::processMessage(const IslMessage &item)
 {
-    qDebug() << QString::fromStdString(item.DebugString());
+    qDebug() << getSafeDebugString(item);
 
     switch (item.message_type()) {
         case IslMessage::ROOM_COMMAND_CONTAINER: {

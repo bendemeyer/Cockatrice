@@ -21,13 +21,15 @@
 #define SERVER_CARD_H
 
 #include "pb/card_attributes.pb.h"
+#include "pb/serverinfo_card.pb.h"
 #include "server_arrowtarget.h"
 
 #include <QMap>
 #include <QString>
 
 class Server_CardZone;
-class ServerInfo_Card;
+class Event_SetCardCounter;
+class Event_SetCardAttr;
 
 class Server_Card : public Server_ArrowTarget
 {
@@ -37,6 +39,7 @@ private:
     int id;
     int coord_x, coord_y;
     QString name;
+    QString provider_id;
     QMap<int, int> counters;
     bool tapped;
     bool attacking;
@@ -49,10 +52,16 @@ private:
 
     Server_Card *parentCard;
     QList<Server_Card *> attachedCards;
+    Server_Card *stashedCard;
 
 public:
-    Server_Card(QString _name, int _id, int _coord_x, int _coord_y, Server_CardZone *_zone = 0);
-    ~Server_Card();
+    Server_Card(QString _name,
+                QString _provider_id,
+                int _id,
+                int _coord_x,
+                int _coord_y,
+                Server_CardZone *_zone = nullptr);
+    ~Server_Card() override;
 
     Server_CardZone *getZone() const
     {
@@ -66,6 +75,10 @@ public:
     int getId() const
     {
         return id;
+    }
+    QString getProviderId() const
+    {
+        return provider_id;
     }
     int getX() const
     {
@@ -83,9 +96,9 @@ public:
     {
         return counters;
     }
-    int getCounter(int id) const
+    int getCounter(int counter_id) const
     {
-        return counters.value(id, 0);
+        return counters.value(counter_id, 0);
     }
     bool getTapped() const
     {
@@ -141,7 +154,7 @@ public:
     {
         name = _name;
     }
-    void setCounter(int id, int value);
+    void setCounter(int _id, int value, Event_SetCardCounter *event = nullptr);
     void setTapped(bool _tapped)
     {
         tapped = _tapped;
@@ -181,11 +194,33 @@ public:
     }
     void removeAttachedCard(Server_Card *card)
     {
-        attachedCards.removeAt(attachedCards.indexOf(card));
+        attachedCards.removeOne(card);
+    }
+    void setStashedCard(Server_Card *card)
+    {
+        // setStashedCard should only be called on creation of a new card, so
+        // there should never be an already existing stashed card.
+        Q_ASSERT(!stashedCard);
+
+        // Stashed cards can't themselves have stashed cards, and tokens can't
+        // be stashed.
+        if (card->stashedCard || card->getDestroyOnZoneChange()) {
+            stashedCard = card->takeStashedCard();
+            card->deleteLater();
+        } else {
+            stashedCard = card;
+        }
+    }
+    Server_Card *takeStashedCard()
+    {
+        Server_Card *oldStashedCard = stashedCard;
+        stashedCard = nullptr;
+        return oldStashedCard;
     }
 
     void resetState();
     QString setAttribute(CardAttribute attribute, const QString &avalue, bool allCards);
+    QString setAttribute(CardAttribute attribute, const QString &avalue, Event_SetCardAttr *event = nullptr);
 
     void getInfo(ServerInfo_Card *info);
 };

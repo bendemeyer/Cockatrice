@@ -14,7 +14,7 @@
 RNG_SFMT::RNG_SFMT(QObject *parent) : RNG_Abstract(parent)
 {
     // initialize the random number generator with a 32bit integer seed (timestamp)
-    sfmt_init_gen_rand(&sfmt, QDateTime::currentDateTime().toTime_t());
+    sfmt_init_gen_rand(&sfmt, QDateTime::currentDateTime().toSecsSinceEpoch());
 }
 
 /**
@@ -44,11 +44,13 @@ unsigned int RNG_SFMT::rand(int min, int max)
         return max;
 
     // This is actually not used in Cockatrice:
-    // Someone wants rand() % -foo, so we compute -rand(0, +foo)
-    // This is the only time where min > max is (sort of) legal.
+    // Someone wants rand() % -foo, so we should compute -rand(0, +foo)
+    // But this method returns an unsigned int, so it doesn't really make
+    // a difference.
+    // This is the only time when min > max is (sort of) legal.
     // Not handling this will cause the application to crash.
     if (min == 0 && max < 0) {
-        return -cdf(0, -max);
+        return cdf(0, -max);
     }
 
     // No special cases are left, except !(min > max) which is caught in the cdf itself.

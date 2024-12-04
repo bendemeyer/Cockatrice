@@ -21,18 +21,18 @@
 #include "main.h"
 
 #include "QtNetwork/QNetworkInterface"
-#include "carddatabase.h"
-#include "dlg_settings.h"
+#include "client/network/spoiler_background_updater.h"
+#include "client/sound_engine.h"
+#include "client/ui/pixel_map_generator.h"
+#include "client/ui/theme_manager.h"
+#include "client/ui/window_main.h"
+#include "dialogs/dlg_settings.h"
 #include "featureset.h"
-#include "logger.h"
-#include "pixmapgenerator.h"
+#include "game/cards/card_database.h"
 #include "rng_sfmt.h"
-#include "settingscache.h"
-#include "soundengine.h"
-#include "spoilerbackgroundupdater.h"
-#include "thememanager.h"
+#include "settings/cache_settings.h"
+#include "utility/logger.h"
 #include "version_string.h"
-#include "window_main.h"
 
 #include <QApplication>
 #include <QCryptographicHash>
@@ -43,12 +43,10 @@
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QSystemTrayIcon>
-#include <QTextCodec>
 #include <QTextStream>
 #include <QTranslator>
 #include <QtPlugin>
 
-CardDatabase *db;
 QTranslator *translator, *qtTranslator;
 RNG_Abstract *rng;
 SoundEngine *soundEngine;
@@ -67,11 +65,29 @@ void installNewTranslator()
 {
     QString lang = SettingsCache::instance().getLang();
 
-    qtTranslator->load("qt_" + lang, QLibraryInfo::location(QLibraryInfo::TranslationsPath));
+    QString qtNameHint = "qt_" + lang;
+#if (QT_VERSION >= QT_VERSION_CHECK(6, 0, 0))
+    QString qtTranslationPath = QLibraryInfo::path(QLibraryInfo::TranslationsPath);
+#else
+    QString qtTranslationPath = QLibraryInfo::location(QLibraryInfo::TranslationsPath);
+#endif
+
+    bool qtTranslationLoaded = qtTranslator->load(qtNameHint, qtTranslationPath);
+    if (!qtTranslationLoaded) {
+        qDebug() << "Unable to load qt translation" << qtNameHint << "at" << qtTranslationPath;
+    } else {
+        qDebug() << "Loaded qt translation" << qtNameHint << "at" << qtTranslationPath;
+    }
     qApp->installTranslator(qtTranslator);
-    translator->load(translationPrefix + "_" + lang, translationPath);
+
+    QString appNameHint = translationPrefix + "_" + lang;
+    bool appTranslationLoaded = qtTranslator->load(appNameHint, translationPath);
+    if (!appTranslationLoaded) {
+        qDebug() << "Unable to load" << translationPrefix << "translation" << appNameHint << "at" << translationPath;
+    } else {
+        qDebug() << "Loaded" << translationPrefix << "translation" << appNameHint << "at" << translationPath;
+    }
     qApp->installTranslator(translator);
-    qDebug() << "Language changed:" << lang;
 }
 
 QString const generateClientID()
@@ -134,7 +150,6 @@ int main(int argc, char *argv[])
     rng = new RNG_SFMT;
     themeManager = new ThemeManager;
     soundEngine = new SoundEngine;
-    db = new CardDatabase;
 
     qtTranslator = new QTranslator;
     translator = new QTranslator;
@@ -165,11 +180,12 @@ int main(int argc, char *argv[])
     ui.show();
     qDebug("main(): ui.show() finished");
 
+#if (QT_VERSION < QT_VERSION_CHECK(6, 0, 0))
     app.setAttribute(Qt::AA_UseHighDpiPixmaps);
+#endif
     app.exec();
 
     qDebug("Event loop finished, terminating...");
-    delete db;
     delete rng;
     PingPixmapGenerator::clear();
     CountryPixmapGenerator::clear();

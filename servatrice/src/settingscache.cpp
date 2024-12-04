@@ -19,11 +19,11 @@ SettingsCache::SettingsCache(const QString &fileName, QSettings::Format format, 
 #endif
     disallowedRegExpStr.removeDuplicates();
     for (const QString &regExpStr : disallowedRegExpStr) {
-        disallowedRegExp.append(QRegExp(regExpStr));
+        disallowedRegExp.append(QRegularExpression(QString("\\A%1\\z").arg(regExpStr)));
     }
 }
 
-QString SettingsCache::guessConfigurationPath(QString &specificPath)
+QString SettingsCache::guessConfigurationPath()
 {
     const QString fileName = "servatrice.ini";
     if (QFile::exists(qApp->applicationDirPath() + "/portable.dat")) {
@@ -32,9 +32,6 @@ QString SettingsCache::guessConfigurationPath(QString &specificPath)
     }
 
     QString guessFileName;
-    // specific path
-    if (!specificPath.isEmpty() && QFile::exists(specificPath))
-        return specificPath;
 
     // application directory path
     guessFileName = QCoreApplication::applicationDirPath() + "/" + fileName;
@@ -48,6 +45,6 @@ QString SettingsCache::guessConfigurationPath(QString &specificPath)
         return guessFileName;
 #endif
 
-    guessFileName = QStandardPaths::writableLocation(QStandardPaths::DataLocation) + "/" + fileName;
+    guessFileName = QStandardPaths::writableLocation(QStandardPaths::AppLocalDataLocation) + "/" + fileName;
     return guessFileName;
 }

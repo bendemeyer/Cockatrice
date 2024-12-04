@@ -2,7 +2,7 @@
 
 #include "main.h"
 #include "oracleimporter.h"
-#include "settingscache.h"
+#include "settings/cache_settings.h"
 #include "version_string.h"
 
 #include <QAbstractButton>
@@ -54,6 +54,9 @@
 
 OracleWizard::OracleWizard(QWidget *parent) : QWizard(parent)
 {
+    // define a dummy context that will be used where needed
+    QString dummy = QT_TRANSLATE_NOOP("i18n", "English");
+
     settings = new QSettings(SettingsCache::instance().getSettingsPath() + "global.ini", QSettings::IniFormat, this);
     connect(&SettingsCache::instance(), SIGNAL(langChanged()), this, SLOT(updateLanguage()));
 
@@ -140,16 +143,19 @@ IntroPage::IntroPage(QWidget *parent) : OracleWizardPage(parent)
     languageLabel = new QLabel(this);
     versionLabel = new QLabel(this);
     languageBox = new QComboBox(this);
-    QString setLanguage = SettingsCache::instance().getLang();
 
-    QStringList qmFiles = findQmFiles();
-    for (int i = 0; i < qmFiles.size(); i++) {
-        QString langName = languageName(qmFiles[i]);
-        languageBox->addItem(langName, qmFiles[i]);
-        if ((qmFiles[i] == setLanguage) ||
-            (setLanguage.isEmpty() && langName == QCoreApplication::translate("i18n", DEFAULT_LANG_NAME))) {
-            languageBox->setCurrentIndex(i);
-        }
+    QStringList languageCodes = findQmFiles();
+    for (const QString &code : languageCodes) {
+        QString langName = languageName(code);
+        languageBox->addItem(langName, code);
+    }
+
+    QString setLanguage = QCoreApplication::translate("i18n", DEFAULT_LANG_NAME);
+    int index = languageBox->findText(setLanguage, Qt::MatchExactly);
+    if (index == -1) {
+        qWarning() << "could not find language" << setLanguage;
+    } else {
+        languageBox->setCurrentIndex(index);
     }
 
     connect(languageBox, SIGNAL(currentIndexChanged(int)), this, SLOT(languageBoxChanged(int)));
@@ -167,20 +173,21 @@ QStringList IntroPage::findQmFiles()
 {
     QDir dir(translationPath);
     QStringList fileNames = dir.entryList(QStringList(translationPrefix + "_*.qm"), QDir::Files, QDir::Name);
-    fileNames.replaceInStrings(QRegExp(translationPrefix + "_(.*)\\.qm"), "\\1");
+    fileNames.replaceInStrings(QRegularExpression(translationPrefix + "_(.*)\\.qm"), "\\1");
     return fileNames;
 }
 
-QString IntroPage::languageName(const QString &qmFile)
+QString IntroPage::languageName(const QString &lang)
 {
-    if (qmFile == DEFAULT_LANG_CODE) {
-        return DEFAULT_LANG_NAME;
+    QTranslator qTranslator;
+
+    QString appNameHint = translationPrefix + "_" + lang;
+    bool appTranslationLoaded = qTranslator.load(appNameHint, translationPath);
+    if (!appTranslationLoaded) {
+        qDebug() << "Unable to load" << translationPrefix << "translation" << appNameHint << "at" << translationPath;
     }
 
-    QTranslator translator;
-    translator.load(translationPrefix + "_" + qmFile + ".qm", translationPath);
-
-    return translator.translate("i18n", DEFAULT_LANG_NAME);
+    return qTranslator.translate("i18n", DEFAULT_LANG_NAME);
 }
 
 void IntroPage::languageBoxChanged(int index)
@@ -293,7 +300,7 @@ void LoadSetsPage::actLoadSetsFile()
 bool LoadSetsPage::validatePage()
 {
     // once the import is finished, we call next(); skip validation
-    if (wizard()->importer->getSets().count() > 0) {
+    if (wizard()->downloadedPlainXml || wizard()->importer->getSets().count() > 0) {
         return true;
     }
 
@@ -347,7 +354,6 @@ bool LoadSetsPage::validatePage()
     return false;
 }
 
-#include <iostream>
 void LoadSetsPage::downloadSetsFile(const QUrl &url)
 {
     wizard()->setCardSourceVersion("unknown");
@@ -432,7 +438,7 @@ void LoadSetsPage::actDownloadFinishedSetsFile()
     reply->deleteLater();
 }
 
-void LoadSetsPage::readSetsFromByteArray(QByteArray data)
+void LoadSetsPage::readSetsFromByteArray(QByteArray _data)
 {
     // show an infinite progressbar
     progressBar->setMaximum(0);
@@ -442,12 +448,20 @@ void LoadSetsPage::readSetsFromByteArray(QByteArray data)
     progressLabel->show();
     progressBar->show();
 
+    wizard()->downloadedPlainXml = false;
+    wizard()->xmlData.clear();
+    readSetsFromByteArrayRef(_data);
+}
+
+void LoadSetsPage::readSetsFromByteArrayRef(QByteArray &_data)
+{
     // unzip the file if needed
-    if (data.startsWith(XZ_SIGNATURE)) {
+    if (_data.startsWith(XZ_SIGNATURE)) {
 #ifdef HAS_LZMA
         // zipped file
-        auto *inBuffer = new QBuffer(&data);
-        auto *outBuffer = new QBuffer(this);
+        auto *inBuffer = new QBuffer(&_data);
+        auto newData = QByteArray();
+        auto *outBuffer = new QBuffer(&newData);
         inBuffer->open(QBuffer::ReadOnly);
         outBuffer->open(QBuffer::WriteOnly);
         XzDecompressor xz;
@@ -455,9 +469,8 @@ void LoadSetsPage::readSetsFromByteArray(QByteArray data)
             zipDownloadFailed(tr("Xz extraction failed."));
             return;
         }
-
-        future = QtConcurrent::run(wizard()->importer, &OracleImporter::readSetsFromByteArray, outBuffer->data());
-        watcher.setFuture(future);
+        _data.clear();
+        readSetsFromByteArrayRef(newData);
         return;
 #else
         zipDownloadFailed(tr("Sorry, this version of Oracle does not support xz compressed files."));
@@ -468,11 +481,12 @@ void LoadSetsPage::readSetsFromByteArray(QByteArray data)
         progressBar->hide();
         return;
 #endif
-    } else if (data.startsWith(ZIP_SIGNATURE)) {
+    } else if (_data.startsWith(ZIP_SIGNATURE)) {
 #ifdef HAS_ZLIB
         // zipped file
-        auto *inBuffer = new QBuffer(&data);
-        auto *outBuffer = new QBuffer(this);
+        auto *inBuffer = new QBuffer(&_data);
+        auto newData = QByteArray();
+        auto *outBuffer = new QBuffer(&newData);
         QString fileName;
         UnZip::ErrorCode ec;
         UnZip uz;
@@ -496,9 +510,8 @@ void LoadSetsPage::readSetsFromByteArray(QByteArray data)
             uz.closeArchive();
             return;
         }
-
-        future = QtConcurrent::run(wizard()->importer, &OracleImporter::readSetsFromByteArray, outBuffer->data());
-        watcher.setFuture(future);
+        _data.clear();
+        readSetsFromByteArrayRef(newData);
         return;
 #else
         zipDownloadFailed(tr("Sorry, this version of Oracle does not support zipped files."));
@@ -509,10 +522,23 @@ void LoadSetsPage::readSetsFromByteArray(QByteArray data)
         progressBar->hide();
         return;
 #endif
+    } else if (_data.startsWith("{")) {
+        // Start the computation.
+        jsonData = std::move(_data);
+        future = QtConcurrent::run([this] { return wizard()->importer->readSetsFromByteArray(std::move(jsonData)); });
+        watcher.setFuture(future);
+    } else if (_data.startsWith("<")) {
+        // save xml file and don't do any processing
+        wizard()->downloadedPlainXml = true;
+        wizard()->xmlData = std::move(_data);
+        importFinished();
+    } else {
+        wizard()->enableButtons();
+        setEnabled(true);
+        progressLabel->hide();
+        progressBar->hide();
+        QMessageBox::critical(this, tr("Error"), tr("Failed to interpret downloaded data."));
     }
-    // Start the computation.
-    future = QtConcurrent::run(wizard()->importer, &OracleImporter::readSetsFromByteArray, data);
-    watcher.setFuture(future);
 }
 
 void LoadSetsPage::zipDownloadFailed(const QString &message)
@@ -542,7 +568,7 @@ void LoadSetsPage::importFinished()
     progressLabel->hide();
     progressBar->hide();
 
-    if (watcher.future().result()) {
+    if (wizard()->downloadedPlainXml || watcher.future().result()) {
         wizard()->next();
     } else {
         QMessageBox::critical(this, tr("Error"),
@@ -579,6 +605,12 @@ void SaveSetsPage::initializePage()
 {
     messageLog->clear();
 
+    retranslateUi();
+    if (wizard()->downloadedPlainXml) {
+        messageLog->hide();
+        return;
+    }
+    messageLog->show();
     connect(wizard()->importer, SIGNAL(setIndexChanged(int, int, const QString &)), this,
             SLOT(updateTotalProgress(int, int, const QString &)));
 
@@ -590,7 +622,12 @@ void SaveSetsPage::initializePage()
 void SaveSetsPage::retranslateUi()
 {
     setTitle(tr("Sets imported"));
-    setSubTitle(tr("The following sets have been found:"));
+    if (wizard()->downloadedPlainXml) {
+        setSubTitle(tr("A cockatrice database file of %1 MB has been downloaded.")
+                        .arg(qRound(wizard()->xmlData.size() / 1000000.0)));
+    } else {
+        setSubTitle(tr("The following sets have been found:"));
+    }
 
     saveLabel->setText(tr("Press \"Save\" to store the imported cards in the Cockatrice database."));
     pathLabel->setText(tr("The card database will be saved at the following location:") + "<br>" +
@@ -635,7 +672,19 @@ bool SaveSetsPage::validatePage()
         return false;
     }
 
-    if (!wizard()->importer->saveToFile(fileName, wizard()->getCardSourceUrl(), wizard()->getCardSourceVersion())) {
+    if (wizard()->downloadedPlainXml) {
+        QFile file(fileName);
+        if (!file.open(QIODevice::WriteOnly)) {
+            qDebug() << "File write (w) failed for" << fileName;
+            return false;
+        }
+        if (file.write(wizard()->xmlData) < 1) {
+            qDebug() << "File write (w) failed for" << fileName;
+            return false;
+        }
+        wizard()->xmlData.clear();
+    } else if (!wizard()->importer->saveToFile(fileName, wizard()->getCardSourceUrl(),
+                                               wizard()->getCardSourceVersion())) {
         QMessageBox::critical(this, tr("Error"), tr("The file could not be saved to %1").arg(fileName));
         return false;
     }

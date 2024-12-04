@@ -57,11 +57,12 @@ private slots:
 
 public:
     mutable QReadWriteLock clientsLock, roomsLock; // locking order: roomsLock before clientsLock
-    Server(QObject *parent = nullptr);
-    ~Server() = default;
+    explicit Server(QObject *parent = nullptr);
+    virtual ~Server() = default;
     AuthenticationResult loginUser(Server_ProtocolHandler *session,
                                    QString &name,
                                    const QString &password,
+                                   bool passwordNeedsHash,
                                    QString &reason,
                                    int &secondsLeft,
                                    QString &clientid,
@@ -223,6 +224,7 @@ protected slots:
     void externalRoomUserJoined(int roomId, const ServerInfo_User &userInfo);
     void externalRoomUserLeft(int roomId, const QString &userName);
     void externalRoomSay(int roomId, const QString &userName, const QString &message);
+    void externalRoomRemoveMessages(int roomId, const QString &userName, int amount);
     void externalRoomGameListChanged(int roomId, const ServerInfo_Game &gameInfo);
     void
     externalJoinGameCommandReceived(const Command_JoinGame &cmd, int cmdId, int roomId, int serverId, qint64 sessionId);

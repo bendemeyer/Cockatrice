@@ -88,7 +88,8 @@ int AbstractDecklistNode::depth() const
 }
 
 InnerDecklistNode::InnerDecklistNode(InnerDecklistNode *other, InnerDecklistNode *_parent)
-    : AbstractDecklistNode(_parent), name(other->getName())
+    : AbstractDecklistNode(_parent), name(other->getName()), cardSetShortName(other->getCardSetShortName()),
+      cardCollectorNumber(other->getCardCollectorNumber()), cardProviderId(other->getCardProviderId())
 {
     for (int i = 0; i < other->size(); ++i) {
         auto *inner = dynamic_cast<InnerDecklistNode *>(other->at(i));
@@ -139,14 +140,27 @@ void InnerDecklistNode::clearTree()
 }
 
 DecklistCardNode::DecklistCardNode(DecklistCardNode *other, InnerDecklistNode *_parent)
-    : AbstractDecklistCardNode(_parent), name(other->getName()), number(other->getNumber())
+    : AbstractDecklistCardNode(_parent), name(other->getName()), number(other->getNumber()),
+      cardSetShortName(other->getCardSetShortName()), cardSetNumber(other->getCardCollectorNumber()),
+      cardProviderId(other->getCardProviderId())
 {
 }
 
-AbstractDecklistNode *InnerDecklistNode::findChild(const QString &name)
+AbstractDecklistNode *InnerDecklistNode::findChild(const QString &_name)
 {
     for (int i = 0; i < size(); i++) {
-        if (at(i)->getName() == name) {
+        if (at(i)->getName() == _name) {
+            return at(i);
+        }
+    }
+    return nullptr;
+}
+
+AbstractDecklistNode *InnerDecklistNode::findCardChildByNameAndProviderId(const QString &_name,
+                                                                          const QString &_providerId)
+{
+    for (int i = 0; i < size(); i++) {
+        if (at(i) != nullptr && at(i)->getName() == _name && at(i)->getCardProviderId() == _providerId) {
             return at(i);
         }
     }
@@ -268,9 +282,10 @@ bool InnerDecklistNode::readElement(QXmlStreamReader *xml)
                 InnerDecklistNode *newZone = new InnerDecklistNode(xml->attributes().value("name").toString(), this);
                 newZone->readElement(xml);
             } else if (childName == "card") {
-                DecklistCardNode *newCard =
-                    new DecklistCardNode(xml->attributes().value("name").toString(),
-                                         xml->attributes().value("number").toString().toInt(), this);
+                DecklistCardNode *newCard = new DecklistCardNode(
+                    xml->attributes().value("name").toString(), xml->attributes().value("number").toString().toInt(),
+                    this, xml->attributes().value("setShortName").toString(),
+                    xml->attributes().value("collectorNumber").toString(), xml->attributes().value("uuid").toString());
                 newCard->readElement(xml);
             }
         } else if (xml->isEndElement() && (childName == "zone"))
@@ -292,7 +307,7 @@ bool AbstractDecklistCardNode::readElement(QXmlStreamReader *xml)
 {
     while (!xml->atEnd()) {
         xml->readNext();
-        if (xml->isEndElement() && xml->name() == "card")
+        if (xml->isEndElement() && xml->name().toString() == "card")
             return false;
     }
     return true;
@@ -303,6 +318,16 @@ void AbstractDecklistCardNode::writeElement(QXmlStreamWriter *xml)
     xml->writeEmptyElement("card");
     xml->writeAttribute("number", QString::number(getNumber()));
     xml->writeAttribute("name", getName());
+
+    if (getCardSetShortName().isEmpty()) {
+        xml->writeAttribute("setShortName", getCardSetShortName());
+    }
+    if (getCardCollectorNumber().isEmpty()) {
+        xml->writeAttribute("collectorNumber", getCardCollectorNumber());
+    }
+    if (getCardProviderId().isEmpty()) {
+        xml->writeAttribute("uuid", getCardProviderId());
+    }
 }
 
 QVector<QPair<int, int>> InnerDecklistNode::sort(Qt::SortOrder order)
@@ -435,7 +460,7 @@ bool DeckList::loadFromXml(QXmlStreamReader *xml)
     while (!xml->atEnd()) {
         xml->readNext();
         if (xml->isStartElement()) {
-            if (xml->name() != "cockatrice_deck")
+            if (xml->name().toString() != "cockatrice_deck")
                 return false;
             while (!xml->atEnd()) {
                 xml->readNext();
@@ -488,34 +513,33 @@ bool DeckList::saveToFile_Native(QIODevice *device)
 
 bool DeckList::loadFromStream_Plain(QTextStream &in)
 {
-    const QRegularExpression reCardLine("^\\s*[\\w\\[\\(\\{].*$", QRegularExpression::UseUnicodePropertiesOption);
+    const QRegularExpression reCardLine(R"(^\s*[\w\[\(\{].*$)", QRegularExpression::UseUnicodePropertiesOption);
     const QRegularExpression reEmpty("^\\s*$");
-    const QRegularExpression reComment("[\\w\\[\\(\\{].*$", QRegularExpression::UseUnicodePropertiesOption);
+    const QRegularExpression reComment(R"([\w\[\(\{].*$)", QRegularExpression::UseUnicodePropertiesOption);
     const QRegularExpression reSBMark("^\\s*sb:\\s*(.+)", QRegularExpression::CaseInsensitiveOption);
     const QRegularExpression reSBComment("^sideboard\\b.*$", QRegularExpression::CaseInsensitiveOption);
     const QRegularExpression reDeckComment("^((main)?deck(list)?|mainboard)\\b",
                                            QRegularExpression::CaseInsensitiveOption);
 
     // simplified matches
-    const QRegularExpression reMultiplier("^[xX\\(\\[]*(\\d+)[xX\\*\\)\\]]* ?(.+)");
-    const QRegularExpression reBrace(" ?[\\[\\{][^\\]\\}]*[\\]\\}] ?"); // not nested
-    const QRegularExpression reRoundBrace("^\\([^\\)]*\\) ?");          // () are only matched at start of string
-    const QRegularExpression reDigitBrace(" ?\\(\\d*\\) ?");            // () are matched if containing digits
-    const QRegularExpression reBraceDigit(
-        " ?\\([\\dA-Z]+\\) *\\d+$"); // () are matched if containing setcode then a number
+    const QRegularExpression reMultiplier(R"(^[xX\(\[]*(\d+)[xX\*\)\]]* ?(.+))");
+    const QRegularExpression reBrace(R"( ?[\[\{][^\]\}]*[\]\}] ?)"); // not nested
+    const QRegularExpression reRoundBrace(R"(^\([^\)]*\) ?)");       // () are only matched at start of string
+    const QRegularExpression reDigitBrace(R"( ?\(\d*\) ?)");         // () are matched if containing digits
+                                                             // () are matched if containing setcode then a number
+    const QRegularExpression reBraceDigit(R"( ?\([\dA-Z]+\) *\d+$)");
     const QHash<QRegularExpression, QString> differences{{QRegularExpression("’"), QString("'")},
                                                          {QRegularExpression("Æ"), QString("Ae")},
                                                          {QRegularExpression("æ"), QString("ae")},
-                                                         {QRegularExpression(" ?[|/]+ ?"), QString(" // ")},
-                                                         {QRegularExpression("(?<![A-Z]) ?& ?"), QString(" // ")}};
+                                                         {QRegularExpression(" ?[|/]+ ?"), QString(" // ")}};
 
     cleanList();
 
-    QStringList inputs = in.readAll().trimmed().split('\n');
-    int max_line = inputs.size();
+    auto inputs = in.readAll().trimmed().split('\n');
+    auto max_line = inputs.size();
 
     // start at the first empty line before the first cardline
-    int deckStart = inputs.indexOf(reCardLine);
+    auto deckStart = inputs.indexOf(reCardLine);
     if (deckStart == -1) { // there are no cards?
         if (inputs.indexOf(reComment) == -1) {
             return false; // input is empty
@@ -537,7 +561,7 @@ bool DeckList::loadFromStream_Plain(QTextStream &in)
             if (sBStart == -1) {
                 sBStart = max_line;
             }
-            int nextCard = inputs.indexOf(reCardLine, sBStart + 1);
+            auto nextCard = inputs.indexOf(reCardLine, sBStart + 1);
             if (inputs.indexOf(reEmpty, nextCard + 1) != -1) {
                 sBStart = max_line; // if there is another empty line all cards are mainboard
             }
@@ -549,7 +573,7 @@ bool DeckList::loadFromStream_Plain(QTextStream &in)
 
     // parse name and comments
     while (index < deckStart) {
-        const QString current = inputs.at(index++);
+        const auto &current = inputs.at(index++);
         if (!current.contains(reEmpty)) {
             match = reComment.match(current);
             name = match.captured();
@@ -557,7 +581,7 @@ bool DeckList::loadFromStream_Plain(QTextStream &in)
         }
     }
     while (index < deckStart) {
-        const QString current = inputs.at(index++);
+        const auto &current = inputs.at(index++);
         if (!current.contains(reEmpty)) {
             match = reComment.match(current);
             comments += match.captured() + '\n';
@@ -602,7 +626,7 @@ bool DeckList::loadFromStream_Plain(QTextStream &in)
         int amount = 1;
         match = reMultiplier.match(cardName);
         if (match.hasMatch()) {
-            amount = match.capturedRef(1).toInt();
+            amount = match.captured(1).toInt();
             cardName = match.captured(2);
         }
 
@@ -631,7 +655,7 @@ bool DeckList::loadFromStream_Plain(QTextStream &in)
     return true;
 }
 
-InnerDecklistNode *DeckList::getZoneObjFromName(const QString zoneName)
+InnerDecklistNode *DeckList::getZoneObjFromName(const QString &zoneName)
 {
     for (int i = 0; i < root->size(); i++) {
         auto *node = dynamic_cast<InnerDecklistNode *>(root->at(i));
@@ -741,14 +765,18 @@ int DeckList::getSideboardSize() const
     return size;
 }
 
-DecklistCardNode *DeckList::addCard(const QString &cardName, const QString &zoneName)
+DecklistCardNode *DeckList::addCard(const QString &cardName,
+                                    const QString &zoneName,
+                                    const QString &cardSetName,
+                                    const QString &cardSetCollectorNumber,
+                                    const QString &cardProviderId)
 {
     auto *zoneNode = dynamic_cast<InnerDecklistNode *>(root->findChild(zoneName));
     if (zoneNode == nullptr) {
         zoneNode = new InnerDecklistNode(zoneName, root);
     }
 
-    auto *node = new DecklistCardNode(cardName, 1, zoneNode);
+    auto *node = new DecklistCardNode(cardName, 1, zoneNode, cardSetName, cardSetCollectorNumber, cardProviderId);
     updateDeckHash();
 
     return node;
@@ -800,7 +828,6 @@ bool DeckList::deleteNode(AbstractDecklistNode *node, InnerDecklistNode *rootNod
 void DeckList::updateDeckHash()
 {
     QStringList cardList;
-    bool isValidDeckList = true;
     QSet<QString> hashZones, optionalZones;
 
     hashZones << DECK_ZONE_MAIN << DECK_ZONE_SIDE; // Zones in deck to be included in hashing process
@@ -815,9 +842,6 @@ void DeckList::updateDeckHash()
                 for (int k = 0; k < card->getNumber(); ++k) {
                     cardList.append((node->getName() == DECK_ZONE_SIDE ? "SB:" : "") + card->getName().toLower());
                 }
-            } else if (!optionalZones.contains(node->getName())) // Not a valid zone -> cheater?
-            {
-                isValidDeckList = false; // Deck is invalid
             }
         }
     }
@@ -827,7 +851,7 @@ void DeckList::updateDeckHash()
                      (((quint64)(unsigned char)deckHashArray[1]) << 24) +
                      (((quint64)(unsigned char)deckHashArray[2] << 16)) +
                      (((quint64)(unsigned char)deckHashArray[3]) << 8) + (quint64)(unsigned char)deckHashArray[4];
-    deckHash = (isValidDeckList) ? QString::number(number, 32).rightJustified(8, '0') : "INVALID";
+    deckHash = QString::number(number, 32).rightJustified(8, '0');
 
     emit deckHashChanged();
 }

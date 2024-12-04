@@ -5,10 +5,10 @@
 <p align='center'>
    <a href="#cockatrice"><b>Cockatrice</b></a> <b>|</b>
    <a href="#download-">Download</a> <b>|</b>
-   <a href="#get-involved--">Get Involved</a> <b>|</b>
+   <a href="#get-involved-">Get Involved</a> <b>|</b>
    <a href="#community-resources">Community</a> <b>|</b>
    <a href="#translations-">Translations</a> <b>|</b>
-   <a href="#build-">Build</a> <b>|</b>
+   <a href="#build--">Build</a> <b>|</b>
    <a href="#run">Run</a> <b>|</b>
    <a href="#license-">License</a>
 </p>
@@ -40,9 +40,9 @@ Downloads are available for full releases and the current beta version in develo
    - To be a Cockatrice Beta Tester, use this version. Find more information [here](https://github.com/Cockatrice/Cockatrice/wiki/Release-Channels)!
    
 
-# Get Involved [![Discord](https://img.shields.io/discord/314987288398659595?label=Discord&logo=discord&logoColor=white)](https://discord.gg/3Z9yzmA) [![Gitter Chat](https://img.shields.io/gitter/room/Cockatrice/Cockatrice)](https://gitter.im/Cockatrice/Cockatrice)
+# Get Involved [![Discord](https://img.shields.io/discord/314987288398659595?label=Discord&logo=discord&logoColor=white)](https://discord.gg/3Z9yzmA)
 
-Join our [Discord community](https://discord.gg/3Z9yzmA) to connect with the project or fellow users of the app. The Cockatrice developers are also available on [Gitter](https://gitter.im/Cockatrice/Cockatrice). Come here to talk about the application, features, or just to hang out.<br>
+Join our [Discord community](https://discord.gg/3Z9yzmA) to connect with the project, contributors or fellow users of the app. Come here to talk about the application, features, or just to hang out.<br>
 For support regarding specific servers, please contact that server's admin or forum for support rather than asking here.<br>
 
 To contribute code to the project, please review [the guidelines](https://github.com/Cockatrice/Cockatrice/blob/master/.github/CONTRIBUTING.md).
@@ -51,8 +51,6 @@ We maintain two tags for contributors to find issues to work on:
 - [Help wanted](https://github.com/Cockatrice/Cockatrice/issues?utf8=%E2%9C%93&q=is%3Aopen%20is%3Aissue%20label%3A%22Help%20Wanted%22%20): This tag is used for issues that we are looking for a contributor to work on. Often this is for feature suggestions we are willing to accept, but don't have the time to work on ourselves.
 
 For both tags, we're willing to provide help to contributors in showing them where and how they can make changes, as well as code review for changes they submit.
-
-Read the long-term project **roadmap** to see planned edits and milestones [here](https://docs.google.com/document/d/1Ewe5uSaRE2nR2pNPMaGmP6gVZdqgFbBgwSscGqIr4W0/edit).
 
 We try to be responsive to new issues. We'll provide advice on how best to implement a feature; alternately, we can show you where the codebase is doing something similar before you get too far along.
 
@@ -67,18 +65,14 @@ Cockatrice uses the [Google Developer Documentation Style Guide](https://develop
 - [reddit r/Cockatrice](https://reddit.com/r/cockatrice)
 
 
-# Translations [![Transifex Project](https://img.shields.io/badge/translate-on%20transifex-brightgreen)](https://www.transifex.com/projects/p/cockatrice/)
+# Translations [![Transifex Project](https://img.shields.io/badge/translate-on%20transifex-brightgreen)](https://transifex.com/cockatrice/cockatrice/)
 
-Cockatrice uses Transifex for translations. You can help us bring Cockatrice and Oracle to your language or just edit single wordings right from within your browser by visiting our [Transifex project page](https://www.transifex.com/projects/p/cockatrice/).<br>
-
-| Cockatrice | Oracle |
-|:-:|:-:|
-| [![Cockatrice Translation Status](https://www.transifex.com/projects/p/cockatrice/resource/cockatrice/chart/image_png/)](https://www.transifex.com/projects/p/cockatrice/) | [![Oracle Translation Status](https://www.transifex.com/projects/p/cockatrice/resource/oracle/chart/image_png/)](https://www.transifex.com/projects/p/cockatrice/) |
+Cockatrice uses Transifex for translations. You can help us bring Cockatrice, Oracle and Webatrice to your language or just adjust single wordings right from within your browser by visiting our [Transifex project page](https://transifex.com/cockatrice/cockatrice/).<br>
 
 Check out our [Translator FAQ](https://github.com/Cockatrice/Cockatrice/wiki/Translation-FAQ) for more information about contributing!<br>
 
 
-# Build [![CI Builds](https://github.com/Cockatrice/Cockatrice/actions/workflows/ci-builds.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/ci-builds.yml?query=branch%3Amaster+event%3Apush)
+# Build [![CI Desktop](https://github.com/Cockatrice/Cockatrice/actions/workflows/desktop-build.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/desktop-build.yml?query=branch%3Amaster+event%3Apush) [![CI Web](https://github.com/Cockatrice/Cockatrice/actions/workflows/web-build.yml/badge.svg?branch=master&event=push)](https://github.com/Cockatrice/Cockatrice/actions/workflows/web-build.yml?query=branch%3Amaster+event%3Apush)
 
 **Detailed compiling instructions can be found on the Cockatrice wiki under [Compiling Cockatrice](https://github.com/Cockatrice/Cockatrice/wiki/Compiling-Cockatrice)**
 
@@ -117,6 +111,7 @@ The following flags can be passed to `cmake`:
 - `-DWARNING_AS_ERROR=0` Whether to treat compilation warnings as errors in debug mode (default 1 = yes).
 - `-DUPDATE_TRANSLATIONS=1` Configure `make` to update the translation .ts files for new strings in the source code. Note: Running `make clean` will remove the .ts files (default 0 = no).
 - `-DTEST=1` Enable regression tests (default 0 = no). Note: needs googletest, will be downloaded on the fly if unavailable. To run tests: ```make test```.
+- `-DFORCE_USE_QT5=1` Skip looking for Qt6 before trying to find Qt5
 
 
 # Run

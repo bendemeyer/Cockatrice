@@ -2,7 +2,7 @@
 #
 # provides the protobuf interfaces
 
-SET(PROTO_FILES
+set(PROTO_FILES
     admin_commands.proto
     card_attributes.proto
     color.proto
@@ -91,6 +91,7 @@ SET(PROTO_FILES
     event_reverse_turn.proto
     event_roll_die.proto
     event_room_say.proto
+    event_remove_messages.proto
     event_server_complete_list.proto
     event_server_identification.proto
     event_server_message.proto
@@ -114,6 +115,7 @@ SET(PROTO_FILES
     moderator_commands.proto
     move_card_to_zone.proto
     response_activate.proto
+    response_adjust_mod.proto
     response_ban_history.proto
     response_deck_download.proto
     response_deck_list.proto
@@ -125,13 +127,13 @@ SET(PROTO_FILES
     response_join_room.proto
     response_list_users.proto
     response_login.proto
+    response_password_salt.proto
     response_register.proto
     response_replay_download.proto
     response_replay_list.proto
-    response_adjust_mod.proto
+    response_viewlog_history.proto
     response_warn_history.proto
     response_warn_list.proto
-    response_viewlog_history.proto
     response.proto
     room_commands.proto
     room_event.proto
@@ -158,23 +160,35 @@ SET(PROTO_FILES
     session_event.proto
 )
 
-include_directories(${PROTOBUF_INCLUDE_DIRS})
-include_directories(${CMAKE_CURRENT_BINARY_DIR})
-PROTOBUF_GENERATE_CPP(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
+if(${Protobuf_VERSION} VERSION_LESS "3.21.0.0")
+  message(STATUS "Using Protobuf Legacy Mode")
+  include_directories(${PROTOBUF_INCLUDE_DIRS})
+  include_directories(${CMAKE_CURRENT_BINARY_DIR})
+  protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS ${PROTO_FILES})
 
-add_library(cockatrice_protocol ${PROTO_SRCS} ${PROTO_HDRS})
-set(cockatrice_protocol_LIBS ${PROTOBUF_LIBRARIES})
-if (UNIX)
+  add_library(cockatrice_protocol ${PROTO_SRCS} ${PROTO_HDRS})
+  set(cockatrice_protocol_LIBS ${PROTOBUF_LIBRARIES})
+  if(UNIX)
     set(cockatrice_protocol_LIBS ${cockatrice_protocol_LIBS} -lpthread)
-endif (UNIX)
-target_link_libraries(cockatrice_protocol ${cockatrice_protocol_LIBS})
+  endif(UNIX)
+  target_link_libraries(cockatrice_protocol ${cockatrice_protocol_LIBS})
 
-# ubuntu uses an outdated package for protobuf, 3.1.0 is required
-if(${Protobuf_VERSION} VERSION_LESS "3.1.0")
+  # ubuntu uses an outdated package for protobuf, 3.1.0 is required
+  if(${Protobuf_VERSION} VERSION_LESS "3.1.0")
     # remove unused parameter and misleading indentation warnings when compiling to avoid errors
-    set(CMAKE_CXX_FLAGS_DEBUG
-        "${CMAKE_CXX_FLAGS_DEBUG} -Wno-unused-parameter -Wno-misleading-indentation")
+    set(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} -Wno-unused-parameter -Wno-misleading-indentation")
     message(WARNING "Older protobuf version found (${Protobuf_VERSION} < 3.1.0), "
-        "disabled the warnings 'unused-parameter' and 'misleading-indentation' for protobuf generated code "
-        "to avoid compilation errors.")
+                    "disabled the warnings 'unused-parameter' and 'misleading-indentation' for protobuf generated code "
+                    "to avoid compilation errors."
+    )
+  endif()
+else()
+  add_library(cockatrice_protocol ${PROTO_FILES})
+  target_link_libraries(cockatrice_protocol PUBLIC protobuf::libprotobuf)
+  set(PROTO_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}")
+  target_include_directories(cockatrice_protocol PUBLIC "${PROTOBUF_INCLUDE_DIRS}")
+
+  protobuf_generate(
+    TARGET cockatrice_protocol IMPORT_DIRS "${CMAKE_CURRENT_LIST_DIR}" PROTOC_OUT_DIR "${PROTO_BINARY_DIR}"
+  )
 endif()

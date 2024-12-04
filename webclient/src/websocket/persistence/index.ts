@@ -1,3 +1,5 @@
-export { default as NormalizeService } from "./NormalizeService";
-export { default as RoomService } from "./RoomService";
-export { default as SessionService } from "./SessionService";
+export { AdminPersistence } from './AdminPresistence';
+export { RoomPersistence } from './RoomPersistence';
+export { SessionPersistence } from './SessionPersistence';
+export { ModeratorPersistence } from './ModeratorPresistence';
+export { GamePersistence } from './GamePersistence';

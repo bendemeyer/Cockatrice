@@ -19,13 +19,23 @@
  ***************************************************************************/
 #include "server_card.h"
 
+#include "pb/event_set_card_attr.pb.h"
+#include "pb/event_set_card_counter.pb.h"
 #include "pb/serverinfo_card.pb.h"
 #include "server_cardzone.h"
 #include "server_player.h"
 
-Server_Card::Server_Card(QString _name, int _id, int _coord_x, int _coord_y, Server_CardZone *_zone)
-    : zone(_zone), id(_id), coord_x(_coord_x), coord_y(_coord_y), name(_name), tapped(false), attacking(false),
-      facedown(false), color(), ptString(), annotation(), destroyOnZoneChange(false), doesntUntap(false), parentCard(0)
+#include <QVariant>
+
+Server_Card::Server_Card(QString _name,
+                         QString _provider_id,
+                         int _id,
+                         int _coord_x,
+                         int _coord_y,
+                         Server_CardZone *_zone)
+    : zone(_zone), id(_id), coord_x(_coord_x), coord_y(_coord_y), name(_name), provider_id(_provider_id), tapped(false),
+      attacking(false), facedown(false), color(), ptString(), annotation(), destroyOnZoneChange(false),
+      doesntUntap(false), parentCard(0), stashedCard(nullptr)
 {
 }
 
@@ -37,6 +47,11 @@ Server_Card::~Server_Card()
 
     if (parentCard)
         parentCard->removeAttachedCard(this);
+
+    if (stashedCard) {
+        stashedCard->deleteLater();
+        stashedCard = nullptr;
+    }
 }
 
 void Server_Card::resetState()
@@ -51,11 +66,20 @@ void Server_Card::resetState()
 
 QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue, bool allCards)
 {
+    if (attribute == AttrTapped && avalue != "1" && allCards && doesntUntap)
+        return QVariant(tapped).toString();
+
+    return setAttribute(attribute, avalue);
+}
+
+QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue, Event_SetCardAttr *event)
+{
+    if (event)
+        event->set_attribute(attribute);
+
     switch (attribute) {
         case AttrTapped: {
-            bool value = avalue == "1";
-            if (!(!value && allCards && doesntUntap))
-                setTapped(value);
+            setTapped(avalue == "1");
             break;
         }
         case AttrAttacking:
@@ -69,6 +93,8 @@ QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue
             break;
         case AttrPT:
             setPT(avalue);
+            if (event)
+                event->set_attr_value(getPT().toStdString());
             return getPT();
         case AttrAnnotation:
             setAnnotation(avalue);
@@ -77,15 +103,22 @@ QString Server_Card::setAttribute(CardAttribute attribute, const QString &avalue
             setDoesntUntap(avalue == "1");
             break;
     }
+    if (event)
+        event->set_attr_value(avalue.toStdString());
     return avalue;
 }
 
-void Server_Card::setCounter(int id, int value)
+void Server_Card::setCounter(int _id, int value, Event_SetCardCounter *event)
 {
     if (value)
-        counters.insert(id, value);
+        counters.insert(_id, value);
     else
-        counters.remove(id);
+        counters.remove(_id);
+
+    if (event) {
+        event->set_counter_id(_id);
+        event->set_counter_value(value);
+    }
 }
 
 void Server_Card::setParentCard(Server_Card *_parentCard)
@@ -102,6 +135,7 @@ void Server_Card::getInfo(ServerInfo_Card *info)
     QString displayedName = facedown ? QString() : name;
 
     info->set_id(id);
+    info->set_provider_id(provider_id.toStdString());
     info->set_name(displayedName.toStdString());
     info->set_x(coord_x);
     info->set_y(coord_y);

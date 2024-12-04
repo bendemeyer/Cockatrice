@@ -1,0 +1,358 @@
+name: Build Desktop
+
+on:
+  push:
+    branches:
+      - master
+    paths-ignore:
+      - '**.md'
+      - 'webclient/**'
+      - '.github/workflows/web-*.yml'
+      - '.github/workflows/translations-*.yml'
+    tags:
+      - '*'
+  pull_request:
+    paths-ignore:
+      - '**.md'
+      - 'webclient/**'
+      - '.github/workflows/web-*.yml'
+      - '.github/workflows/translations-*.yml'
+
+# Cancel earlier, unfinished runs of this workflow on the same branch (unless on master)
+concurrency:
+  group: "${{ github.workflow }} @ ${{ github.ref_name }}"
+  cancel-in-progress: ${{ github.ref_name != 'master' }}
+
+jobs:
+  configure:
+    name: Configure
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{steps.configure.outputs.tag}}
+      sha: ${{steps.configure.outputs.sha}}
+
+    steps:  
+      - name: Configure
+        id: configure
+        shell: bash
+        run: |
+          tag_regex='^refs/tags/'
+          if [[ $GITHUB_EVENT_NAME == pull-request ]]; then    # pull request
+            sha="${{github.event.pull_request.head.sha}}"
+          elif [[ $GITHUB_REF =~ $tag_regex ]]; then    # release
+            sha="$GITHUB_SHA"
+            tag="${GITHUB_REF/refs\/tags\//}"
+            echo "tag=$tag" >>"$GITHUB_OUTPUT"
+          else    # push to branch
+            sha="$GITHUB_SHA"
+          fi
+          echo "sha=$sha" >>"$GITHUB_OUTPUT"
+
+      - name: Checkout
+        if: steps.configure.outputs.tag != null
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Prepare release parameters
+        id: prepare
+        if: steps.configure.outputs.tag != null
+        shell: bash
+        env:
+          TAG: ${{steps.configure.outputs.tag}}
+        run: .ci/prep_release.sh
+
+      - name: Create release
+        if: steps.configure.outputs.tag != null
+        id: create_release
+        shell: bash
+        env:
+          GH_TOKEN: ${{github.token}}
+          tag_name: ${{steps.configure.outputs.tag}}
+          target: ${{steps.configure.outputs.sha}}
+          release_name: ${{steps.prepare.outputs.title}}
+          body_path: ${{steps.prepare.outputs.body_path}}
+          prerelease: ${{steps.prepare.outputs.is_beta}}
+        run: |
+          if [[ $prerelease == yes ]]; then
+            args="--prerelease"
+          fi
+          gh release create "$tag_name" --draft --verify-tag $args \
+              --target "$target" --title "$release_name" \
+              --notes-file "$body_path"
+
+  build-linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        # These names correspond to the files in ".ci/$distro$version"
+        include:
+          - distro: Arch
+            package: skip    # We are packaged in Arch already
+            allow-failure: yes
+
+          - distro: Debian
+            version: 11
+            package: DEB
+            test: skip    # Running tests on all distros is superfluous
+
+          - distro: Debian
+            version: 12
+            package: DEB
+
+          - distro: Fedora
+            version: 40
+            package: RPM
+            test: skip    # Running tests on all distros is superfluous
+
+          - distro: Fedora
+            version: 41
+            package: RPM
+
+          - distro: Ubuntu
+            version: 20.04
+            package: DEB
+            test: skip    # Ubuntu 20.04 has a broken Qt for debug builds
+
+          - distro: Ubuntu
+            version: 22.04
+            package: DEB
+            test: skip    # Running tests on all distros is superfluous
+
+          - distro: Ubuntu
+            version: 24.04
+            package: DEB
+
+    name: ${{matrix.distro}} ${{matrix.version}}
+    needs: configure
+    runs-on: ubuntu-latest
+    continue-on-error: ${{matrix.allow-failure == 'yes'}}
+    env:
+      NAME: ${{matrix.distro}}${{matrix.version}}
+      CACHE: /tmp/${{matrix.distro}}${{matrix.version}}-cache    # ${{runner.temp}} does not work?
+      # Cache size over the entire repo is 10Gi:
+      # https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows#usage-limits-and-eviction-policy
+      CCACHE_SIZE: 200M
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate cache timestamp
+        id: cache_timestamp
+        shell: bash
+        run: echo "timestamp=$(date -u '+%Y%m%d%H%M%S')" >>"$GITHUB_OUTPUT"
+
+      - name: Restore cache
+        uses: actions/cache@v4
+        env:
+          timestamp: ${{steps.cache_timestamp.outputs.timestamp}}
+        with:
+          path: ${{env.CACHE}}
+          key: docker-${{matrix.distro}}${{matrix.version}}-cache-${{env.timestamp}}
+          restore-keys: |
+            docker-${{matrix.distro}}${{matrix.version}}-cache-
+
+      - name: Build ${{matrix.distro}} ${{matrix.version}} Docker image
+        shell: bash
+        run: source .ci/docker.sh --build
+
+      - name: Build debug and test
+        if: matrix.test != 'skip'
+        shell: bash
+        run: |
+          source .ci/docker.sh
+          RUN --server --debug --test --ccache "$CCACHE_SIZE" --parallel 4
+
+      - name: Build release package
+        id: build
+        if: matrix.package != 'skip'
+        shell: bash
+        env:
+          BUILD_DIR: build
+          SUFFIX: '-${{matrix.distro}}${{matrix.version}}'
+          type: '${{matrix.package}}'
+        run: |
+          source .ci/docker.sh
+          RUN --server --release --package "$type" --dir "$BUILD_DIR" \
+                  --ccache "$CCACHE_SIZE" --parallel 4
+          .ci/name_build.sh
+
+      - name: Upload artifact
+        if: matrix.package != 'skip'
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{matrix.distro}}${{matrix.version}}-package
+          path: ${{steps.build.outputs.path}}
+          if-no-files-found: error
+
+      - name: Upload to release
+        if: matrix.package != 'skip' && needs.configure.outputs.tag != null
+        shell: bash
+        env:
+          GH_TOKEN: ${{github.token}}
+          tag_name: ${{needs.configure.outputs.tag}}
+          asset_path: ${{steps.build.outputs.path}}
+          asset_name: ${{steps.build.outputs.name}}
+        run: gh release upload "$tag_name" "$asset_path#$asset_name"
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: 13
+            soc: Intel
+            os: macos-13
+            xcode: "14.3.1"
+            type: Release
+            core_count: 4
+            make_package: 1
+
+          - target: 14
+            soc: Apple
+            os: macos-14
+            xcode: "15.4"
+            type: Release
+            core_count: 3
+            make_package: 1
+
+          - target: 14
+            soc: Apple
+            os: macos-14
+            xcode: "15.4"
+            type: Debug
+            core_count: 3
+
+    name: macOS ${{matrix.target}}${{ matrix.soc == 'Intel' && ' Intel' || '' }}${{ matrix.type == 'Debug' && ' Debug' || '' }}
+    needs: configure
+    runs-on: ${{matrix.os}}
+    continue-on-error: ${{matrix.allow-failure == 'yes'}}
+    env:
+      DEVELOPER_DIR:
+        /Applications/Xcode_${{matrix.xcode}}.app/Contents/Developer
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install dependencies using Homebrew
+        shell: bash
+        # CMake cannot find the MySQL connector
+        # Neither of these works: mariadb-connector-c mysql-connector-c++
+        env:
+          HOMEBREW_NO_INSTALLED_DEPENDENTS_CHECK: 1
+        run: |
+          brew update
+          brew install protobuf qt --force-bottle
+
+      - name: Build on Xcode ${{matrix.xcode}}
+        shell: bash
+        id: build
+        env:
+          BUILDTYPE: '${{matrix.type}}'
+          MAKE_TEST: 1
+          MAKE_PACKAGE: '${{matrix.make_package}}'
+          PACKAGE_SUFFIX: '-macOS${{matrix.target}}_${{matrix.soc}}'
+        # macOS runner have 3 cores usually - only the macos-13 image has 4:
+        # https://docs.github.com/en/actions/using-github-hosted-runners/using-github-hosted-runners/about-github-hosted-runners#standard-github-hosted-runners-for-public-repositories
+        # https://github.com/actions/runner-images?tab=readme-ov-file#available-images
+        run: .ci/compile.sh --server --parallel ${{matrix.core_count}}
+
+      - name: Upload artifact
+        if: matrix.make_package
+        uses: actions/upload-artifact@v4
+        with:
+          name: macOS${{matrix.target}}${{ matrix.soc == 'Intel' && '_Intel' || '' }}${{ matrix.type == 'Debug' && '_Debug' || '' }}-dmg
+          path: ${{steps.build.outputs.path}}
+          if-no-files-found: error
+
+      - name: Upload to release
+        if: matrix.package != 'skip' && needs.configure.outputs.tag != null
+        shell: bash
+        env:
+          GH_TOKEN: ${{github.token}}
+          tag_name: ${{needs.configure.outputs.tag}}
+          asset_path: ${{steps.build.outputs.path}}
+          asset_name: ${{steps.build.outputs.name}}
+        run: gh release upload "$tag_name" "$asset_path#$asset_name"
+
+  build-windows:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: 7
+            qt_version: 5.15.*
+            qt_arch: msvc2019_64
+
+          - target: 10
+            qt_version: 6.5.*
+            qt_arch: msvc2019_64
+            qt_modules: "qtimageformats qtmultimedia qtwebsockets"
+
+    name: Windows ${{matrix.target}}
+    needs: configure
+    runs-on: windows-2022
+    env:
+      CMAKE_GENERATOR: 'Visual Studio 17 2022'
+
+    steps:
+      - name: Add msbuild to PATH
+        id: add-msbuild
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Qt ${{matrix.qt_version}}
+        uses: jurplel/install-qt-action@v4
+        with:
+          cache: true
+          setup-python: false
+          version: ${{matrix.qt_version}}
+          arch: win64_${{matrix.qt_arch}}
+          tools: ${{matrix.qt_tools}}
+          modules: ${{matrix.qt_modules}}
+
+      - name: Run vcpkg
+        uses: lukka/run-vcpkg@v11
+        with:
+          runVcpkgInstall: true
+          doNotCache: false
+        env:
+          VCPKG_DEFAULT_TRIPLET: 'x64-windows'
+          VCPKG_DISABLE_METRICS: 1
+
+      - name: Build Cockatrice
+        id: build
+        shell: bash
+        env:
+          PACKAGE_SUFFIX: '-Win${{matrix.target}}'
+          CMAKE_GENERATOR: '${{env.CMAKE_GENERATOR}}'
+          CMAKE_GENERATOR_PLATFORM: 'x64'
+          QTDIR: '${{github.workspace}}\Qt\${{matrix.qt_version}}\win64_${{matrix.qt_arch}}'
+        # No need for --parallel flag, MTT is added in the compile script to let cmake/msbuild manage core count,
+        # project and process parallelism: https://devblogs.microsoft.com/cppblog/improved-parallelism-in-msbuild/
+        run: .ci/compile.sh --server --release --test --package
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Windows${{matrix.target}}-installer
+          path: ${{steps.build.outputs.path}}
+          if-no-files-found: error
+
+      - name: Upload to release
+        if: matrix.package != 'skip' && needs.configure.outputs.tag != null
+        shell: bash
+        env:
+          GH_TOKEN: ${{github.token}}
+          tag_name: ${{needs.configure.outputs.tag}}
+          asset_path: ${{steps.build.outputs.path}}
+          asset_name: ${{steps.build.outputs.name}}
+        run: gh release upload "$tag_name" "$asset_path#$asset_name"

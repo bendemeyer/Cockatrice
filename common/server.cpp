@@ -19,6 +19,7 @@
  ***************************************************************************/
 #include "server.h"
 
+#include "debug_pb_message.h"
 #include "featureset.h"
 #include "pb/event_connection_closed.pb.h"
 #include "pb/event_list_rooms.pb.h"
@@ -29,7 +30,6 @@
 #include "server_counter.h"
 #include "server_database_interface.h"
 #include "server_game.h"
-#include "server_metatypes.h"
 #include "server_player.h"
 #include "server_protocolhandler.h"
 #include "server_remoteuserinterface.h"
@@ -79,6 +79,7 @@ Server_DatabaseInterface *Server::getDatabaseInterface() const
 AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
                                        QString &name,
                                        const QString &password,
+                                       bool passwordNeedsHash,
                                        QString &reasonStr,
                                        int &secondsLeft,
                                        QString &clientid,
@@ -99,8 +100,8 @@ AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
 
     Server_DatabaseInterface *databaseInterface = getDatabaseInterface();
 
-    AuthenticationResult authState =
-        databaseInterface->checkUserPassword(session, name, password, clientid, reasonStr, secondsLeft);
+    AuthenticationResult authState = databaseInterface->checkUserPassword(session, name, password, clientid, reasonStr,
+                                                                          secondsLeft, passwordNeedsHash);
     if (authState == NotLoggedIn || authState == UserIsBanned || authState == UsernameInvalid ||
         authState == UserIsInactive)
         return authState;
@@ -116,7 +117,7 @@ AuthenticationResult Server::loginUser(Server_ProtocolHandler *session,
                 Event_ConnectionClosed event;
                 event.set_reason(Event_ConnectionClosed::LOGGEDINELSEWERE);
                 event.set_reason_str("You have been logged out due to logging in at another location.");
-                event.set_end_time(QDateTime::currentDateTime().toTime_t());
+                event.set_end_time(QDateTime::currentDateTime().toSecsSinceEpoch());
 
                 SessionEvent *se = users.value(name)->prepareSessionEvent(event);
                 users.value(name)->sendProtocolItem(*se);
@@ -228,6 +229,11 @@ void Server::addClient(Server_ProtocolHandler *client)
 
 void Server::removeClient(Server_ProtocolHandler *client)
 {
+    int clientIndex = clients.indexOf(client);
+    if (clientIndex == -1) {
+        qWarning() << "tried to remove non existing client";
+        return;
+    }
 
     if (client->getConnectionType() == "tcp")
         tcpUserCount--;
@@ -236,15 +242,15 @@ void Server::removeClient(Server_ProtocolHandler *client)
         webSocketUserCount--;
 
     QWriteLocker locker(&clientsLock);
-    clients.removeAt(clients.indexOf(client));
+    clients.removeAt(clientIndex);
     ServerInfo_User *data = client->getUserInfo();
     if (data) {
         Event_UserLeft event;
         event.set_name(data->name());
         SessionEvent *se = Server_ProtocolHandler::prepareSessionEvent(event);
-        for (auto &client : clients)
-            if (client->getAcceptsUserListChanges())
-                client->sendProtocolItem(*se);
+        for (auto &_client : clients)
+            if (_client->getAcceptsUserListChanges())
+                _client->sendProtocolItem(*se);
         sendIsl_SessionEvent(*se);
         delete se;
 
@@ -389,6 +395,19 @@ void Server::externalRoomSay(int roomId, const QString &userName, const QString 
                                        room->getId(), room->getName());
 }
 
+void Server::externalRoomRemoveMessages(int roomId, const QString &userName, int amount)
+{
+    // This function is always called from the main thread via signal/slot.
+    QReadLocker locker(&roomsLock);
+
+    Server_Room *room = rooms.value(roomId);
+    if (room == nullptr) {
+        qDebug() << "externalRoomRemoveMessages: room id=" << roomId << "not found";
+        return;
+    }
+    room->removeSaidMessages(userName, amount);
+}
+
 void Server::externalRoomGameListChanged(int roomId, const ServerInfo_Game &gameInfo)
 {
     // This function is always called from the main thread via signal/slot.
@@ -472,7 +491,7 @@ void Server::externalGameCommandContainerReceived(const CommandContainer &cont,
         GameEventStorage ges;
         for (int i = cont.game_command_size() - 1; i >= 0; --i) {
             const GameCommand &sc = cont.game_command(i);
-            qDebug() << "[ISL]" << QString::fromStdString(sc.ShortDebugString());
+            qDebug() << "[ISL]" << getSafeDebugString(sc);
 
             Response::ResponseCode resp = player->processGameCommand(sc, responseContainer, ges);
 

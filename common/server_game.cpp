@@ -69,6 +69,7 @@ Server_Game::Server_Game(const ServerInfo_User &_creatorInfo,
       spectatorsNeedPassword(_spectatorsNeedPassword), spectatorsCanTalk(_spectatorsCanTalk),
       spectatorsSeeEverything(_spectatorsSeeEverything), inactivityCounter(0), startTimeOfThisGame(0),
       secondsElapsed(0), firstGameStarted(false), turnOrderReversed(false), startTime(QDateTime::currentDateTime()),
+      pingClock(nullptr),
 #if (QT_VERSION >= QT_VERSION_CHECK(5, 14, 0))
       gameMutex()
 #else
@@ -97,7 +98,7 @@ Server_Game::~Server_Game()
 
     gameClosed = true;
     sendGameEventContainer(prepareGameEvent(Event_GameClosed(), -1));
-    for (Server_Player *player : players.values()) {
+    for (auto *player : players.values()) {
         player->prepareDestroy();
     }
     players.clear();
@@ -112,10 +113,22 @@ Server_Game::~Server_Game()
     replayList.append(currentReplay);
     storeGameInformation();
 
-    for (int i = 0; i < replayList.size(); ++i)
-        delete replayList[i];
+    for (auto *replay : replayList) {
+        delete replay;
+    }
+    replayList.clear();
+
+    room = nullptr;
+    currentReplay = nullptr;
+    creatorInfo = nullptr;
+
+    if (pingClock) {
+        delete pingClock;
+        pingClock = nullptr;
+    }
 
     qDebug() << "Server_Game destructor: gameId=" << gameId;
+    deleteLater();
 }
 
 void Server_Game::storeGameInformation()
@@ -126,16 +139,16 @@ void Server_Game::storeGameInformation()
     ServerInfo_ReplayMatch *replayMatchInfo = replayEvent.mutable_match_info();
     replayMatchInfo->set_game_id(gameInfo.game_id());
     replayMatchInfo->set_room_name(room->getName().toStdString());
-    replayMatchInfo->set_time_started(QDateTime::currentDateTime().addSecs(-secondsElapsed).toTime_t());
+    replayMatchInfo->set_time_started(QDateTime::currentDateTime().addSecs(-secondsElapsed).toSecsSinceEpoch());
     replayMatchInfo->set_length(secondsElapsed);
     replayMatchInfo->set_game_name(gameInfo.description());
 
     const QStringList &allGameTypes = room->getGameTypes();
-    QStringList gameTypes;
+    QStringList _gameTypes;
     for (int i = gameInfo.game_types_size() - 1; i >= 0; --i)
-        gameTypes.append(allGameTypes[gameInfo.game_types(i)]);
+        _gameTypes.append(allGameTypes[gameInfo.game_types(i)]);
 
-    for (auto playerName : allPlayersEver) {
+    for (const auto &playerName : allPlayersEver) {
         replayMatchInfo->add_player_names(playerName.toStdString());
     }
 
@@ -158,7 +171,7 @@ void Server_Game::storeGameInformation()
     delete sessionEvent;
 
     if (server->getStoreReplaysEnabled()) {
-        server->getDatabaseInterface()->storeGameInformation(room->getName(), gameTypes, gameInfo, allPlayersEver,
+        server->getDatabaseInterface()->storeGameInformation(room->getName(), _gameTypes, gameInfo, allPlayersEver,
                                                              allSpectatorsEver, replayList);
     }
 }
@@ -263,7 +276,7 @@ void Server_Game::sendGameStateToPlayers()
 {
     // game state information for replay and omniscient spectators
     Event_GameStateChanged omniscientEvent;
-    createGameStateChangedEvent(&omniscientEvent, 0, true, false);
+    createGameStateChangedEvent(&omniscientEvent, nullptr, true, false);
 
     GameEventContainer *replayCont = prepareGameEvent(omniscientEvent, -1);
     replayCont->set_seconds_elapsed(secondsElapsed - startTimeOfThisGame);
@@ -274,18 +287,19 @@ void Server_Game::sendGameStateToPlayers()
     // If spectators are not omniscient, we need an additional createGameStateChangedEvent call, otherwise we can use
     // the data we used for the replay. All spectators are equal, so we don't need to make a createGameStateChangedEvent
     // call for each one.
-    Event_GameStateChanged spectatorEvent;
-    if (spectatorsSeeEverything)
-        spectatorEvent = omniscientEvent;
-    else
-        createGameStateChangedEvent(&spectatorEvent, 0, false, false);
+    Event_GameStateChanged spectatorNormalEvent;
+    createGameStateChangedEvent(&spectatorNormalEvent, nullptr, false, false);
 
     // send game state info to clients according to their role in the game
     for (Server_Player *player : players.values()) {
         GameEventContainer *gec;
-        if (player->getSpectator())
-            gec = prepareGameEvent(spectatorEvent, -1);
-        else {
+        if (player->getSpectator()) {
+            if (spectatorsSeeEverything || player->getJudge()) {
+                gec = prepareGameEvent(omniscientEvent, -1);
+            } else {
+                gec = prepareGameEvent(spectatorNormalEvent, -1);
+            }
+        } else {
             Event_GameStateChanged event;
             createGameStateChangedEvent(&event, player, false, false);
 
@@ -328,7 +342,7 @@ void Server_Game::doStartGameIfReady()
         gameInfo->set_started(false);
 
         Event_GameStateChanged omniscientEvent;
-        createGameStateChangedEvent(&omniscientEvent, 0, true, true);
+        createGameStateChangedEvent(&omniscientEvent, nullptr, true, true);
 
         GameEventContainer *replayCont = prepareGameEvent(omniscientEvent, -1);
         replayCont->set_seconds_elapsed(0);
@@ -552,13 +566,13 @@ void Server_Game::removeArrowsRelatedToPlayer(GameEventStorage &ges, Server_Play
             Server_Arrow *a = arrows[i];
             Server_Card *targetCard = qobject_cast<Server_Card *>(a->getTargetItem());
             if (targetCard) {
-                if (targetCard->getZone()->getPlayer() == player)
+                if (targetCard->getZone() != nullptr && targetCard->getZone()->getPlayer() == player)
                     toDelete.append(a);
             } else if (static_cast<Server_Player *>(a->getTargetItem()) == player)
                 toDelete.append(a);
 
             // Don't use else here! It has to happen regardless of whether targetCard == 0.
-            if (a->getStartCard()->getZone()->getPlayer() == player)
+            if (a->getStartCard()->getZone() != nullptr && a->getStartCard()->getZone()->getPlayer() == player)
                 toDelete.append(a);
         }
         for (int i = 0; i < toDelete.size(); ++i) {
@@ -697,8 +711,9 @@ void Server_Game::createGameJoinedEvent(Server_Player *player, ResponseContainer
     event2.set_active_player_id(activePlayer);
     event2.set_active_phase(activePhase);
 
-    for (Server_Player *player : players.values()) {
-        player->getInfo(event2.add_player_list(), player, player->getSpectator() && spectatorsSeeEverything, true);
+    for (auto *_player : players.values()) {
+        _player->getInfo(event2.add_player_list(), _player,
+                         (_player->getSpectator() && (spectatorsSeeEverything || _player->getJudge())), true);
     }
 
     rc.enqueuePostResponseItem(ServerMessage::GAME_EVENT_CONTAINER, prepareGameEvent(event2, -1));
@@ -712,8 +727,8 @@ void Server_Game::sendGameEventContainer(GameEventContainer *cont,
 
     cont->set_game_id(gameId);
     for (Server_Player *player : players.values()) {
-        const bool playerPrivate =
-            (player->getPlayerId() == privatePlayerId) || (player->getSpectator() && spectatorsSeeEverything);
+        const bool playerPrivate = (player->getPlayerId() == privatePlayerId) ||
+                                   (player->getSpectator() && (spectatorsSeeEverything || player->getJudge()));
         if ((recipients.testFlag(GameEventStorageItem::SendToPrivate) && playerPrivate) ||
             (recipients.testFlag(GameEventStorageItem::SendToOthers) && !playerPrivate))
             player->sendGameEvent(*cont);
@@ -769,6 +784,6 @@ void Server_Game::getInfo(ServerInfo_Game &result) const
         result.set_spectators_can_chat(spectatorsCanTalk);
         result.set_spectators_omniscient(spectatorsSeeEverything);
         result.set_spectators_count(getSpectatorCount());
-        result.set_start_time(startTime.toTime_t());
+        result.set_start_time(startTime.toSecsSinceEpoch());
     }
 }

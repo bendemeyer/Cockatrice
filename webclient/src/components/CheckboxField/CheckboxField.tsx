@@ -1,9 +1,9 @@
-import React from "react";
-import Checkbox from "@material-ui/core/Checkbox";
-import FormControlLabel from "@material-ui/core/FormControlLabel";
+import React from 'react';
+import Checkbox from '@mui/material/Checkbox';
+import FormControlLabel from '@mui/material/FormControlLabel';
 
-const CheckboxField = ({ input, label }) => {
-  const { value, onChange } = input;
+const CheckboxField = (props) => {
+  const { input: { value, onChange }, label, ...args } = props;
 
   // @TODO this isnt unchecking properly
   return (
@@ -12,9 +12,10 @@ const CheckboxField = ({ input, label }) => {
       label={label}
       control={
         <Checkbox
+          { ...args }
           className="checkbox-field__box"
           checked={!!value}
-          onChange={onChange}
+          onChange={(e, checked) => onChange(checked)}
           color="primary"
         />
       }

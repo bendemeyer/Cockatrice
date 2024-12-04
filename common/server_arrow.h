@@ -21,13 +21,25 @@ public:
     {
         return id;
     }
+    void setId(int _id)
+    {
+        id = _id;
+    }
     Server_Card *getStartCard() const
     {
         return startCard;
     }
+    void setStartCard(Server_Card *startCard_)
+    {
+        startCard = startCard_;
+    }
     Server_ArrowTarget *getTargetItem() const
     {
         return targetItem;
+    }
+    void setTargetItem(Server_ArrowTarget *targetItem_)
+    {
+        targetItem = targetItem_;
     }
     const color &getColor() const
     {

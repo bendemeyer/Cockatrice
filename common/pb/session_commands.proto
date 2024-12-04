@@ -1,5 +1,4 @@
 syntax = "proto2";
-import "serverinfo_user.proto";
 
 message SessionCommand {
     enum SessionCommandType {
@@ -27,6 +26,7 @@ message SessionCommand {
         FORGOT_PASSWORD_REQUEST = 1021;
         FORGOT_PASSWORD_RESET = 1022;
         FORGOT_PASSWORD_CHALLENGE = 1023;
+        REQUEST_PASSWORD_SALT = 1024;
         REPLAY_LIST = 1100;
         REPLAY_DOWNLOAD = 1101;
         REPLAY_MODIFY_MATCH = 1102;
@@ -50,6 +50,7 @@ message Command_Login {
     optional string clientid = 3;
     optional string clientver = 4;
     repeated string clientfeatures = 5;
+    optional string hashed_password = 6;
 }
 
 message Command_Message {
@@ -117,15 +118,15 @@ message Command_Register {
     // User name client wants to register
     required string user_name = 1;
     // Hashed password to be inserted into database
-    required string password = 2;
+    optional string password = 2;
     // Email address of the client for user validation
     optional string email = 3;
-    // Gender of the user
-    optional ServerInfo_User.Gender gender = 4;
+    // gender = 4; // obsolete
     // Country code of the user. 2 letter ISO format
     optional string country = 5;
     optional string real_name = 6;
     optional string clientid = 7;
+    optional string hashed_password = 8;
 }
 
 // User wants to activate an account
@@ -146,8 +147,9 @@ message Command_AccountEdit {
     }
     optional string real_name = 1;
     optional string email = 2;
-    optional ServerInfo_User.Gender gender = 3;
+    // gender = 3; // obsolete
     optional string country = 4;
+    optional string password_check = 100; // password is required to change sensitive information
 }
 
 message Command_AccountImage {
@@ -163,6 +165,8 @@ message Command_AccountPassword {
     }
     optional string old_password = 1;
     optional string new_password = 2;
+    // optional string hashed_old_password = 3; // we don't want users to steal hashed passwords and change them
+    optional string hashed_new_password = 4;
 }
 
 message Command_ForgotPasswordRequest {
@@ -181,6 +185,7 @@ message Command_ForgotPasswordReset {
     optional string clientid = 2;
     optional string token = 3;
     optional string new_password = 4;
+    optional string hashed_new_password = 5;
 }
 
 message Command_ForgotPasswordChallenge {
@@ -190,4 +195,11 @@ message Command_ForgotPasswordChallenge {
     required string user_name = 1;
     optional string clientid = 2;
     optional string email = 3;
+}
+
+message Command_RequestPasswordSalt {
+    extend SessionCommand {
+        optional Command_RequestPasswordSalt ext = 1024;
+    }
+    required string user_name = 1;
 }
